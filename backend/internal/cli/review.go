@@ -23,22 +23,29 @@ const (
 
 // reviewRun mirrors the daemon's domain.ReviewRun for the CLI client.
 type reviewRun struct {
-	ID             string     `json:"id"`
-	ReviewID       string     `json:"reviewId"`
-	SessionID      string     `json:"sessionId"`
-	BatchID        string     `json:"batchId"`
-	Harness        string     `json:"harness"`
-	PRURL          string     `json:"prUrl"`
-	TargetSHA      string     `json:"targetSha"`
-	Status         string     `json:"status"`
-	Verdict        string     `json:"verdict"`
-	Body           string     `json:"body"`
-	GithubReviewID string     `json:"githubReviewId"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	DeliveredAt    *time.Time `json:"deliveredAt,omitempty"`
+	TargetKind         string     `json:"targetKind,omitempty"`
+	SnapshotID         string     `json:"snapshotId,omitempty"`
+	Current            bool       `json:"current,omitempty"`
+	InvalidatedAt      *time.Time `json:"invalidatedAt,omitempty"`
+	InvalidationReason string     `json:"invalidationReason,omitempty"`
+	ID                 string     `json:"id"`
+	ReviewID           string     `json:"reviewId"`
+	SessionID          string     `json:"sessionId"`
+	BatchID            string     `json:"batchId"`
+	Harness            string     `json:"harness"`
+	PRURL              string     `json:"prUrl"`
+	TargetSHA          string     `json:"targetSha"`
+	Status             string     `json:"status"`
+	Verdict            string     `json:"verdict"`
+	Body               string     `json:"body"`
+	GithubReviewID     string     `json:"githubReviewId"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	DeliveredAt        *time.Time `json:"deliveredAt,omitempty"`
 }
 
 type reviewState struct {
+	TargetKind  string     `json:"targetKind,omitempty"`
+	SnapshotID  string     `json:"snapshotId,omitempty"`
 	PRURL       string     `json:"prUrl"`
 	PRNumber    int        `json:"prNumber"`
 	Title       string     `json:"title"`
@@ -433,6 +440,12 @@ func (c *commandContext) triggerReview(cmd *cobra.Command, args []string, opts r
 		return err
 	}
 	for _, run := range startedRuns(res) {
+		if run.TargetKind == "local" {
+			if _, err := fmt.Fprintf(out, "  %s reviewing local snapshot %s (run %s)\n", run.Harness, shortReviewSHA(run.SnapshotID), run.ID); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := fmt.Fprintf(out, "  %s reviewing %s at %s (run %s)\n", run.Harness, run.PRURL, shortReviewSHA(run.TargetSHA), run.ID); err != nil {
 			return err
 		}
@@ -495,7 +508,11 @@ func writeReviewList(cmd *cobra.Command, session string, res listReviewsResponse
 		if review.LatestRun != nil && review.LatestRun.Verdict != "" {
 			verdict = review.LatestRun.Verdict
 		}
-		if _, err := fmt.Fprintf(tw, "#%d\t%s\t%s\t%s\n", review.PRNumber, review.Status, verdict, review.Title); err != nil {
+		target := fmt.Sprintf("#%d", review.PRNumber)
+		if review.TargetKind == "local" {
+			target = "local"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", target, review.Status, verdict, review.Title); err != nil {
 			return err
 		}
 	}

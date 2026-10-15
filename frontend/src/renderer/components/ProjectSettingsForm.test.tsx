@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentReadiness } from "../test/agent-readiness-fixtures";
@@ -213,6 +213,27 @@ beforeEach(() => {
 });
 
 describe("ProjectSettingsForm", () => {
+	it("saves Local review with Codex, Claude and the test plan and restores it", async () => {
+		const project = { id: "proj-1", name: "Project One", kind: "single_repo", path: "/repo", repo: "", config: { autoReview:true,workersRequestReview:true,worker: { agent: "codex" }, orchestrator: { agent: "claude-code" } } };
+		mockProject(project);
+		renderSettings("proj-1");
+		await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Review mode" }), "local");
+		fireEvent.change(screen.getByRole("textbox", { name: "Test commands" }), { target: { value: "go test ./...\nnpm test" } });
+		submitSettings();
+		await waitFor(() => expect(putMock).toHaveBeenCalled());
+		const saved = putMock.mock.calls.at(-1)![1].body.config;
+		expect(saved.reviewMode).toBe("local");
+        expect(saved.autoReview).toBe(false);
+        expect(saved.workersRequestReview).not.toBe(true);
+		expect(saved.worker.agent).toBe("codex");
+		expect(saved.reviewers[0].harness).toBe("claude-code");
+		expect(saved.testCommands).toEqual(["go test ./...", "npm test"]);
+		cleanup();
+		mockProject({ ...project, config: saved });
+		renderSettings("proj-1");
+		expect(await screen.findByRole("combobox", { name: "Review mode" })).toHaveValue("local");
+		expect(screen.getByRole("textbox", { name: "Test commands" })).toHaveValue("go test ./...\nnpm test");
+	});
 	it("saves a changed project setting without a submit action", async () => {
 		mockProject({
 			id: "proj-1",

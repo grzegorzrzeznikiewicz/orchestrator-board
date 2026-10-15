@@ -3091,5 +3091,17 @@
 	"settings.defaultSandbox.description": "새 프로젝트의 클라우드 세션이 실행되는 곳이며, 프로젝트가 선택하지 않은 경우 세션이 실행되는 곳입니다.",
 	"settings.defaultSandbox.single": "클라우드 세션이 실행되는 곳입니다. 사용할 수 있는 샌드박스는 하나뿐입니다.",
 	"settings.defaultSandbox.adminOnly": "조직 관리자만 변경할 수 있습니다.",
-	"settings.defaultSandbox.saveFailed": "기본 샌드박스를 저장하지 못했습니다. 다시 시도하세요."
+	"settings.defaultSandbox.saveFailed": "기본 샌드박스를 저장하지 못했습니다. 다시 시도하세요.",
+	"settings.project.reviewWorkflow": "Review workflow",
+	"settings.project.reviewMode": "Review mode",
+	"settings.project.prReview": "Pull request review",
+	"settings.project.localReview": "Local review",
+	"settings.project.testCommands": "Test commands",
+	"settings.project.localReviewDescription": "Codex implements changes and Claude reviews a captured copy. A pull request is optional. Enter one test command per line; this saves the test plan for the local workflow.",
+	"inspector.localReview": "Local review",
+	"inspector.localReviewCurrent": "Current snapshot",
+	"inspector.localReviewStale": "Outdated snapshot — run review again",
+	"inspector.localReviewSnapshot": "Snapshot",
+	"inspector.localReviewApproved": "Reviewer approved",
+	"inspector.localReviewRun": "Run local review"
 }

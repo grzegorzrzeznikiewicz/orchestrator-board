@@ -5201,8 +5201,11 @@ export interface components {
             prNumber: number;
             prUrl: string;
             previousRun?: components["schemas"]["ReviewRun"];
+            snapshotId?: string;
             /** @enum {string} */
             status: "needs_review" | "running" | "up_to_date" | "changes_requested" | "ineligible";
+            /** @enum {string} */
+            targetKind?: "pr" | "local";
             targetSha: string;
             title: string;
         };
@@ -5261,9 +5264,12 @@ export interface components {
             orchestratorRules?: string;
             postCreate?: string[];
             preRemove?: string[];
+            /** @enum {string} */
+            reviewMode?: "pr" | "local";
             reviewers?: components["schemas"]["DomainReviewerConfig"][];
             sessionPrefix?: string;
             symlinks?: string[];
+            testCommands?: string[];
             trackerIntake?: components["schemas"]["TrackerIntakeConfig"];
             worker?: components["schemas"]["RoleOverride"];
             workersRequestReview?: boolean;
@@ -5478,15 +5484,22 @@ export interface components {
             body: string;
             /** Format: date-time */
             createdAt: string;
+            current?: boolean;
             /** Format: date-time */
             deliveredAt?: null | string;
             githubReviewId: string;
             harness: string;
             id: string;
+            /** Format: date-time */
+            invalidatedAt?: null | string;
+            invalidationReason?: string;
             prUrl: string;
             reviewId: string;
             sessionId: string;
+            snapshotId?: string;
             status: string;
+            /** @enum {string} */
+            targetKind?: "pr" | "local";
             targetSha: string;
             /** @enum {string} */
             triggerSource: "manual" | "agent" | "auto";

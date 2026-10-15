@@ -11,6 +11,8 @@ import { SettingsOptionMenu } from "./settings/SettingsOptionMenu";
 import { Button } from "./ui/button";
 
 export type ProjectSettingsDraft = {
+	reviewMode?: "pr" | "local";
+	testCommands?: string;
 	displayName: string;
 	defaultBranch: string;
 	sessionPrefix: string;
@@ -48,6 +50,7 @@ export type ProjectAgentPickerProps = {
 	onChange: (agent: string) => void;
 };
 type Capabilities = {
+	localReview?: boolean;
 	workflow: boolean;
 	sessionPrefix: boolean;
 	intake: boolean;
@@ -180,10 +183,27 @@ export function ProjectSettingsEditor({ initialValues, section, capabilities, de
 						{capabilities.sessionPrefix && <ProjectSettingsInputRow id="sessionPrefix" label={t("settings.project.sessionPrefix")} editLabel={t("settings.field.edit", { label: t("settings.project.sessionPrefix") })} editIcon={<Pencil className="settings-inline-edit-icon" aria-hidden="true" />} value={draft.sessionPrefix} placeholder="ao" onChange={(sessionPrefix) => patch({ sessionPrefix })} />}
 					</ProjectSettingsSection>
 					{capabilities.intake && <ProjectSettingsSection title={t("settings.project.issues")} grouped><IntakeFields variant="settings" form={intake} onChange={(values) => patch({ intakeEnabled: values.enabled ?? draft.intakeEnabled, intakeRepo: values.repo ?? draft.intakeRepo, intakeAssignee: values.assignee ?? draft.intakeAssignee })} repoPreview={{ value: draft.intakeRepo.trim() || deriveRepoPath(repository ?? ""), host: deriveRepoHost(repository ?? "") }} /></ProjectSettingsSection>}
-					<ProjectSettingsSection title={t("settings.project.pullRequests")} grouped>
+					{capabilities.localReview && <ProjectSettingsSection title={t("settings.project.reviewWorkflow")} grouped>
+						<ProjectSettingsRow label={t("settings.project.reviewMode")}>
+							<select aria-label={t("settings.project.reviewMode")} className="rounded-md border border-input bg-background px-2 py-1 text-sm" value={draft.reviewMode ?? "pr"} onChange={(event) => {
+								const reviewMode = event.target.value as "pr" | "local";
+								patch({ reviewMode, ...(reviewMode === "local" ? { autoReview:false,workersRequestReview:false,workerAgent: "codex", reviewerHarness: "claude-code", workerModel: "", workerMode: "", workerEffort: "", reviewerModel: "", reviewerMode: "", reviewerEffort: "" } : {}) });
+							}}>
+								<option value="pr">{t("settings.project.prReview")}</option>
+								<option value="local">{t("settings.project.localReview")}</option>
+							</select>
+						</ProjectSettingsRow>
+						{draft.reviewMode === "local" && <>
+							<ProjectSettingsRow label={t("settings.project.testCommands")}>
+								<textarea aria-label={t("settings.project.testCommands")} className="min-h-20 w-full max-w-sm rounded-md border border-input bg-background p-2 font-mono text-xs" value={draft.testCommands ?? ""} onChange={(event) => patch({ testCommands: event.target.value })} />
+							</ProjectSettingsRow>
+							<p className="px-3 py-2 text-xs text-settings-muted">{t("settings.project.localReviewDescription")}</p>
+						</>}
+					</ProjectSettingsSection>}
+					{draft.reviewMode !== "local" && <ProjectSettingsSection title={t("settings.project.pullRequests")} grouped>
 						<ProjectAutoReviewToggle description={autoReviewDescription} checked={draft.autoReview} onCheckedChange={(autoReview) => patch({ autoReview })} />
 						{capabilities.workersRequestReview && <ProjectWorkersRequestReviewToggle checked={draft.workersRequestReview ?? false} onCheckedChange={(workersRequestReview) => patch({ workersRequestReview })} />}
-					</ProjectSettingsSection>
+					</ProjectSettingsSection>}
 				</>}
 				{generalExtra}
 			</> : <>

@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
@@ -24,6 +25,19 @@ type ArchiveReviewsBySessionParams struct {
 
 func (q *Queries) ArchiveReviewsBySession(ctx context.Context, arg ArchiveReviewsBySessionParams) error {
 	_, err := q.db.ExecContext(ctx, archiveReviewsBySession, arg.UpdatedAt, arg.SessionID)
+	return err
+}
+
+const beginLocalReviewEditing = `-- name: BeginLocalReviewEditing :exec
+UPDATE sessions SET activity_state='active',activity_last_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+WHERE sessions.id = ? AND (
+ EXISTS (SELECT 1 FROM projects WHERE projects.id=sessions.project_id AND json_extract(config,'$.reviewMode')='local')
+ OR EXISTS (SELECT 1 FROM review_run WHERE session_id=sessions.id AND target_kind='local')
+)
+`
+
+func (q *Queries) BeginLocalReviewEditing(ctx context.Context, id domain.SessionID) error {
+	_, err := q.db.ExecContext(ctx, beginLocalReviewEditing, id)
 	return err
 }
 
@@ -299,7 +313,7 @@ func (q *Queries) GetReviewBySessionAndHarness(ctx context.Context, arg GetRevie
 }
 
 const getReviewRun = `-- name: GetReviewRun :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE id = ?
 `
 
@@ -322,12 +336,19 @@ func (q *Queries) GetReviewRun(ctx context.Context, id string) (ReviewRun, error
 		&i.BatchID,
 		&i.AutoInjectReview,
 		&i.TriggerSource,
+		&i.TargetKind,
+		&i.SnapshotID,
+		&i.SnapshotPath,
+		&i.SnapshotObservation,
+		&i.SnapshotEpoch,
+		&i.InvalidatedAt,
+		&i.InvalidationReason,
 	)
 	return i, err
 }
 
 const getReviewRunBySessionPRAndSHA = `-- name: GetReviewRunBySessionPRAndSHA :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND pr_url = ? AND target_sha = ? ORDER BY created_at DESC LIMIT 1
 `
 
@@ -356,12 +377,19 @@ func (q *Queries) GetReviewRunBySessionPRAndSHA(ctx context.Context, arg GetRevi
 		&i.BatchID,
 		&i.AutoInjectReview,
 		&i.TriggerSource,
+		&i.TargetKind,
+		&i.SnapshotID,
+		&i.SnapshotPath,
+		&i.SnapshotObservation,
+		&i.SnapshotEpoch,
+		&i.InvalidatedAt,
+		&i.InvalidationReason,
 	)
 	return i, err
 }
 
 const getReviewRunBySessionPRSHAAndHarness = `-- name: GetReviewRunBySessionPRSHAAndHarness :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND pr_url = ? AND target_sha = ? AND harness = ? ORDER BY created_at DESC LIMIT 1
 `
 
@@ -396,30 +424,54 @@ func (q *Queries) GetReviewRunBySessionPRSHAAndHarness(ctx context.Context, arg 
 		&i.BatchID,
 		&i.AutoInjectReview,
 		&i.TriggerSource,
+		&i.TargetKind,
+		&i.SnapshotID,
+		&i.SnapshotPath,
+		&i.SnapshotObservation,
+		&i.SnapshotEpoch,
+		&i.InvalidatedAt,
+		&i.InvalidationReason,
 	)
 	return i, err
 }
 
+const hasPendingLocalReviewWork = `-- name: HasPendingLocalReviewWork :one
+SELECT EXISTS (SELECT 1 FROM conversation_turns
+ WHERE handled_by_session_id = ? AND handled_by_review_id IS NULL AND state IN ('queued','running'))
+`
+
+func (q *Queries) HasPendingLocalReviewWork(ctx context.Context, handledBySessionID domain.SessionID) (bool, error) {
+	row := q.db.QueryRowContext(ctx, hasPendingLocalReviewWork, handledBySessionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertReviewRun = `-- name: InsertReviewRun :exec
-INSERT INTO review_run (id, review_id, session_id, batch_id, harness, trigger_source, pr_url, target_sha, status, verdict, body, github_review_id, created_at, auto_inject_review)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO review_run (id, review_id, session_id, batch_id, harness, trigger_source, pr_url, target_sha, status, verdict, body, github_review_id, created_at, auto_inject_review, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertReviewRunParams struct {
-	ID               string
-	ReviewID         string
-	SessionID        domain.SessionID
-	BatchID          string
-	Harness          domain.ReviewerHarness
-	TriggerSource    domain.ReviewTriggerSource
-	PRURL            string
-	TargetSha        string
-	Status           domain.ReviewRunStatus
-	Verdict          domain.ReviewVerdict
-	Body             string
-	GithubReviewID   string
-	CreatedAt        time.Time
-	AutoInjectReview bool
+	ID                  string
+	ReviewID            string
+	SessionID           domain.SessionID
+	BatchID             string
+	Harness             domain.ReviewerHarness
+	TriggerSource       domain.ReviewTriggerSource
+	PRURL               string
+	TargetSha           string
+	Status              domain.ReviewRunStatus
+	Verdict             domain.ReviewVerdict
+	Body                string
+	GithubReviewID      string
+	CreatedAt           time.Time
+	AutoInjectReview    bool
+	TargetKind          string
+	SnapshotID          string
+	SnapshotPath        string
+	SnapshotObservation string
+	SnapshotEpoch       string
 }
 
 func (q *Queries) InsertReviewRun(ctx context.Context, arg InsertReviewRunParams) error {
@@ -438,7 +490,28 @@ func (q *Queries) InsertReviewRun(ctx context.Context, arg InsertReviewRunParams
 		arg.GithubReviewID,
 		arg.CreatedAt,
 		arg.AutoInjectReview,
+		arg.TargetKind,
+		arg.SnapshotID,
+		arg.SnapshotPath,
+		arg.SnapshotObservation,
+		arg.SnapshotEpoch,
 	)
+	return err
+}
+
+const invalidateLocalReviewRun = `-- name: InvalidateLocalReviewRun :exec
+UPDATE review_run SET invalidated_at = ?, invalidation_reason = ?
+WHERE id = ? AND target_kind = 'local' AND invalidated_at IS NULL
+`
+
+type InvalidateLocalReviewRunParams struct {
+	InvalidatedAt      sql.NullTime
+	InvalidationReason string
+	ID                 string
+}
+
+func (q *Queries) InvalidateLocalReviewRun(ctx context.Context, arg InvalidateLocalReviewRunParams) error {
+	_, err := q.db.ExecContext(ctx, invalidateLocalReviewRun, arg.InvalidatedAt, arg.InvalidationReason, arg.ID)
 	return err
 }
 
@@ -685,7 +758,7 @@ func (q *Queries) ListRecoverableChatReviews(ctx context.Context) ([]ListRecover
 }
 
 const listReviewRunsByBatch = `-- name: ListReviewRunsByBatch :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND batch_id = ? ORDER BY created_at ASC, id ASC
 `
 
@@ -719,6 +792,13 @@ func (q *Queries) ListReviewRunsByBatch(ctx context.Context, arg ListReviewRunsB
 			&i.BatchID,
 			&i.AutoInjectReview,
 			&i.TriggerSource,
+			&i.TargetKind,
+			&i.SnapshotID,
+			&i.SnapshotPath,
+			&i.SnapshotObservation,
+			&i.SnapshotEpoch,
+			&i.InvalidatedAt,
+			&i.InvalidationReason,
 		); err != nil {
 			return nil, err
 		}
@@ -734,7 +814,7 @@ func (q *Queries) ListReviewRunsByBatch(ctx context.Context, arg ListReviewRunsB
 }
 
 const listReviewRunsBySession = `-- name: ListReviewRunsBySession :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? ORDER BY created_at DESC
 `
 
@@ -763,6 +843,13 @@ func (q *Queries) ListReviewRunsBySession(ctx context.Context, sessionID domain.
 			&i.BatchID,
 			&i.AutoInjectReview,
 			&i.TriggerSource,
+			&i.TargetKind,
+			&i.SnapshotID,
+			&i.SnapshotPath,
+			&i.SnapshotObservation,
+			&i.SnapshotEpoch,
+			&i.InvalidatedAt,
+			&i.InvalidationReason,
 		); err != nil {
 			return nil, err
 		}
@@ -842,7 +929,7 @@ func (q *Queries) ListReviewsBySession(ctx context.Context, sessionID domain.Ses
 }
 
 const listRunningReviewRunsBySession = `-- name: ListRunningReviewRunsBySession :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND status = 'running' AND verdict = '' ORDER BY created_at DESC
 `
 
@@ -871,6 +958,13 @@ func (q *Queries) ListRunningReviewRunsBySession(ctx context.Context, sessionID 
 			&i.BatchID,
 			&i.AutoInjectReview,
 			&i.TriggerSource,
+			&i.TargetKind,
+			&i.SnapshotID,
+			&i.SnapshotPath,
+			&i.SnapshotObservation,
+			&i.SnapshotEpoch,
+			&i.InvalidatedAt,
+			&i.InvalidationReason,
 		); err != nil {
 			return nil, err
 		}
@@ -1056,7 +1150,7 @@ func (q *Queries) UpdateReviewAgentSessionID(ctx context.Context, arg UpdateRevi
 }
 
 const updateReviewRunResult = `-- name: UpdateReviewRunResult :execrows
-UPDATE review_run SET status = ?, verdict = ?, body = ?, github_review_id = ?, auto_inject_review = ? WHERE id = ? AND status = 'running'
+UPDATE review_run SET status = ?1, verdict = ?2, body = ?3, github_review_id = ?4, auto_inject_review = ?5 WHERE id = ?6 AND status = 'running' AND (target_kind != 'local' OR invalidated_at IS NULL OR ?7)
 `
 
 type UpdateReviewRunResultParams struct {
@@ -1066,6 +1160,7 @@ type UpdateReviewRunResultParams struct {
 	GithubReviewID   string
 	AutoInjectReview bool
 	ID               string
+	AllowInvalidated interface{}
 }
 
 func (q *Queries) UpdateReviewRunResult(ctx context.Context, arg UpdateReviewRunResultParams) (int64, error) {
@@ -1076,6 +1171,7 @@ func (q *Queries) UpdateReviewRunResult(ctx context.Context, arg UpdateReviewRun
 		arg.GithubReviewID,
 		arg.AutoInjectReview,
 		arg.ID,
+		arg.AllowInvalidated,
 	)
 	if err != nil {
 		return 0, err

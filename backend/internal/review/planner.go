@@ -25,13 +25,15 @@ const (
 
 // PRReviewState is one PR-scoped review decision for a worker session.
 type PRReviewState struct {
-	PRURL       string            `json:"prUrl"`
-	PRNumber    int               `json:"prNumber"`
-	Title       string            `json:"title"`
-	TargetSHA   string            `json:"targetSha"`
-	Status      StateStatus       `json:"status" enum:"needs_review,running,up_to_date,changes_requested,ineligible"`
-	LatestRun   *domain.ReviewRun `json:"latestRun,omitempty"`
-	PreviousRun *domain.ReviewRun `json:"previousRun,omitempty"`
+	TargetKind  domain.ReviewTargetKind `json:"targetKind,omitempty" enum:"pr,local"`
+	SnapshotID  string                  `json:"snapshotId,omitempty"`
+	PRURL       string                  `json:"prUrl"`
+	PRNumber    int                     `json:"prNumber"`
+	Title       string                  `json:"title"`
+	TargetSHA   string                  `json:"targetSha"`
+	Status      StateStatus             `json:"status" enum:"needs_review,running,up_to_date,changes_requested,ineligible"`
+	LatestRun   *domain.ReviewRun       `json:"latestRun,omitempty"`
+	PreviousRun *domain.ReviewRun       `json:"previousRun,omitempty"`
 }
 
 // Plan computes per-PR review work from the currently observed PRs and existing

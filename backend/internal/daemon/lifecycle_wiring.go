@@ -351,6 +351,7 @@ func startSession(ctx context.Context, cfg config.Config, runtime runtimeselect.
 	}
 	reviewerChat, _ := chat.(reviewcore.ReviewerChatController)
 	reviewEngine := reviewcore.New(reviewcore.Deps{
+		DataDir: cfg.DataDir,
 		// The manager's installer gate is bound after the installer is built.
 		HarnessUse: mgr,
 		Store:      store,
@@ -364,6 +365,7 @@ func startSession(ctx context.Context, cfg config.Config, runtime runtimeselect.
 
 		ChatRecoveryDone: reviewerRecoveryDone,
 	})
+	go func() { <-ctx.Done(); reviewEngine.CloseLocalReviews() }()
 	reviewOpts := []reviewsvc.Option{
 		reviewsvc.WithTelemetry(telemetry),
 		reviewsvc.WithNotificationSink(notifications),
