@@ -94,3 +94,13 @@ i rzeczywistych przebiegów Actions nie ma podstaw do stwierdzenia, że całe CI
 jest zielone. Blokada merge pozostaje nieaktywna do skonfigurowania reguły GitHub.
 
 Pełne logi lokalnych przebiegów znajdują się w ignorowanym katalogu `.cache/ob11-*`.
+
+## Pierwsza weryfikacja na GitHubie
+
+Po zgodzie na publikację utworzono PR #2. Pierwszy przebieg wykrył brak wpisu
+opcjonalnej zależności peer `@pierre/theme@1.1.0` pod `@pierre/trees` w lockfile.
+Odtworzono błąd dokładnie na Node 22.23.2 / npm 10.9.8, używanych przez kontrolę
+zgodności. Regeneracja samego lockfile tą wersją npm dodała 11 linii bez zmiany
+wersji istniejących zależności. Kontrola `npm ci --ignore-scripts --dry-run`
+przeszła następnie zarówno pod Node 22 / npm 10, jak i pod Node 24 / npm 11.
+Pełny wynik aktualnego commita należy sprawdzić w Actions przypisanych do PR.
