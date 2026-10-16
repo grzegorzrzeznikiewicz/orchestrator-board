@@ -272,7 +272,8 @@ func TestACPReplayLoadLargeHistoryThroughSDK(t *testing.T) {
 	// Otherwise JSON decoding can lose a scheduler race to the pipe reader,
 	// independently of whether AO correctly defers replay normalization.
 	agent.afterLoadUpdate = func(ctx context.Context, delivered int) error {
-		if delivered%512 != 0 {
+		// Leave the final batch to the SDK's response watermark barrier.
+		if delivered%512 != 0 || delivered == len(updates) {
 			return nil
 		}
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
