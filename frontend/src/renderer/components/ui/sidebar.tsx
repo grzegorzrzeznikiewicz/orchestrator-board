@@ -227,7 +227,6 @@ function Sidebar({
 
 	// Several React HTML event types conflict with Motion's overloaded versions.
 	// Cast once so callers can keep passing through plain div props.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const motionSafeProps = props as any;
 	const childList = React.Children.toArray(children);
 	const rail = childList.filter((child) => React.isValidElement(child) && child.type === SidebarRail);

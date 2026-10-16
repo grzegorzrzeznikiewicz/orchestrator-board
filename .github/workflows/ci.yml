@@ -1,0 +1,107 @@
+name: CI
+
+# Keep this workflow unfiltered: docs-only PRs also need a terminal status.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.select.outputs.backend }}
+      cloud: ${{ steps.select.outputs.cloud }}
+      frontend: ${{ steps.select.outputs.frontend }}
+      cli: ${{ steps.select.outputs.cli }}
+      mobile: ${{ steps.select.outputs.mobile }}
+      e2e_gate: ${{ steps.select.outputs.e2e_gate }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Select affected checks
+        id: select
+        run: node scripts/ci/changes.mjs
+
+  workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Test CI selection and gate
+        run: npm run ci:test
+      - name: Validate all GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck=
+
+  secrets:
+    uses: ./.github/workflows/gitleaks.yml
+
+  go:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.cloud == 'true'
+    uses: ./.github/workflows/go.yml
+    with:
+      backend: ${{ needs.changes.outputs.backend == 'true' }}
+      cloud: ${{ needs.changes.outputs.cloud == 'true' }}
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    uses: ./.github/workflows/frontend.yml
+
+  cli:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    uses: ./.github/workflows/cli-e2e.yml
+
+  mobile:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    uses: ./.github/workflows/mobile.yml
+
+  e2e_gate:
+    needs: changes
+    if: needs.changes.outputs.e2e_gate == 'true'
+    uses: ./.github/workflows/e2e-gate-tests.yml
+
+  required:
+    name: required
+    if: always()
+    needs: [changes, workflow, secrets, go, frontend, cli, mobile, e2e_gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require successful results for every affected area
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/required.mjs

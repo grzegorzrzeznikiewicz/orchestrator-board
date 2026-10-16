@@ -8,8 +8,16 @@ const port = Number(process.env.AO_E2E_PORT ?? 5173);
 
 export default defineConfig({
 	testDir: "e2e",
+	forbidOnly: !!process.env.CI,
+	workers: process.env.CI ? 2 : undefined,
+	retries: process.env.CI ? 1 : 0,
+	reporter: process.env.CI
+		? [["list"], ["html", { open: "never" }], ["junit", { outputFile: "test-results/playwright.xml" }]]
+		: "list",
 	use: {
 		baseURL: `http://127.0.0.1:${port}`,
+		trace: "retain-on-failure",
+		screenshot: "only-on-failure",
 	},
 	webServer: {
 		// dev:web serves the renderer alone (VITE_NO_ELECTRON=1) — no Electron child to

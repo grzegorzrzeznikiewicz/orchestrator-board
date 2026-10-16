@@ -13,8 +13,7 @@ export function remotesFilePath(): string {
 
 // The slice of Electron's ipcMain these handlers need, so tests need no Electron.
 type IpcMainLike = {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the listener
-	// args must unify Electron's IpcMain (any[]) with a test fake (unknown[]),
+	// The listener args must unify Electron's IpcMain (any[]) with a test fake (unknown[]),
 	// and `never[]` rejects both; `any[]` here leaks nowhere past registration.
 	handle(channel: string, listener: (event: unknown, ...args: any[]) => Promise<unknown>): void;
 };

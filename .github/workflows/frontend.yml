@@ -5,21 +5,33 @@ name: Frontend
 # This job ensures both compiler/type checking passes and vitest tests succeed.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/**"
-      - "contracts/cloud/**"
-      - "packages/cloud-client/**"
-      - "packages/product-ui/**"
-      - ".github/workflows/frontend.yml"
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install lint dependencies without Electron build scripts
+        run: npm ci --ignore-scripts
+      - name: Lint frontend
+        run: npm run lint
+      - name: Verify lint rules reject new violations
+        run: npm run lint:test
+
   mac-update-helper:
     # Keep this on Intel to exercise the x64 release target natively while
     # Swift cross-compiles and lipo-verifies the arm64 helper.
@@ -51,6 +63,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: frontend
@@ -98,6 +111,7 @@ jobs:
         run: |
           npm run generate
           git diff --exit-code -- src/schema.ts
+          test -z "$(git ls-files --others --exclude-standard -- src/schema.ts)"
           npm run typecheck
           npm test
           npm pack --dry-run
@@ -128,10 +142,18 @@ jobs:
       - name: Run vitest suite
         env:
           AO_AGENT_BROWSER_TEST_BINARY: ${{ github.workspace }}/frontend/agent-browser/agent-browser
-        run: npx vitest run
+        run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/vitest.xml
 
       - name: Run guarded-navigation browser integration
         run: npm run test:browser-postcondition-integration
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-unit-tests
+          path: frontend/test-results/vitest.xml
+          retention-days: 7
 
   renderer-smoke:
     # RENDERER smoke (issue #2483, renderer slice) — the Playwright specs that run
@@ -175,3 +197,13 @@ jobs:
 
       - name: Run renderer smoke suite
         run: CI=true npm run test:e2e:renderer
+
+      - name: Upload renderer reports and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-smoke
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

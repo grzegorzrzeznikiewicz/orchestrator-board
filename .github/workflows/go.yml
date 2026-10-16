@@ -1,16 +1,26 @@
 name: Go
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - "backend/**"
-      - "cloud/**"
-      - "pricing/**"
-      - "frontend/src/api/schema.ts"
-      - "package.json"
-      - ".github/workflows/go.yml"
+  workflow_call:
+    inputs:
+      backend:
+        description: Verify the daemon, CLI and generated contracts
+        type: boolean
+        default: true
+      cloud:
+        description: Verify the Cloud service
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Verify the daemon, CLI and generated contracts
+        type: boolean
+        default: true
+      cloud:
+        description: Verify the Cloud service
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -21,7 +31,9 @@ concurrency:
 
 jobs:
   backend-core:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -77,7 +89,9 @@ jobs:
           printf '%s\n' "$selected" | xargs go test -race -count=1 -timeout=20m
 
   chat-race:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -101,7 +115,9 @@ jobs:
           go test -race -count=1 -timeout=20m -run "^($selected)$" ./internal/service/chat
 
   session-store-race:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: backend
@@ -117,7 +133,9 @@ jobs:
         run: go test -race -count=1 -timeout=20m ./internal/session_manager ./internal/storage/sqlite/store
 
   sqlite-race:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -142,9 +160,10 @@ jobs:
 
   # Keep the existing required check as the gate for every backend race test.
   build-test:
-    if: always()
+    if: always() && inputs.backend
     needs: [backend-core, chat-race, session-store-race, sqlite-race]
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Check backend results
         run: |
@@ -159,7 +178,9 @@ jobs:
   # an open handle makes both fail. Scoped to those packages rather than the
   # whole suite to keep the matrix cheap.
   windows-workspace:
+    if: inputs.backend
     runs-on: windows-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: backend
@@ -209,7 +230,9 @@ jobs:
         run: go test -race -count=1 -timeout=10m -run '^Test(FindInstalledBinary|WarmReadinessAndFindInstalled|PresslyGoose|Refresh|Probe|ReadinessCoordinator)' ./internal/service/agent
 
   cloud-build-test:
+    if: inputs.cloud
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: cloud
@@ -248,14 +271,16 @@ jobs:
             --build-arg EXPAT_BUILD_IMAGE=mirror.gcr.io/library/debian:trixie-slim .
 
   lint:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache: false
+          cache-dependency-path: backend/go.sum
 
       - name: golangci-lint
         # v8 of the action drives golangci-lint v2 (the schema this config uses);
@@ -272,14 +297,16 @@ jobs:
           # any new issue fails CI rather than being grandfathered.
 
   sqlc-drift:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache: false
+          cache-dependency-path: backend/go.sum
 
       - uses: actions/setup-node@v4
         with:
@@ -294,14 +321,16 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- backend/internal/storage/sqlite/gen)"
 
   api-drift:
+    if: inputs.backend
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache: false
+          cache-dependency-path: backend/go.sum
 
       - uses: actions/setup-node@v4
         with:
@@ -313,7 +342,7 @@ jobs:
       - name: Regenerate API spec and TS types
         run: npm run api
 
-      # openapi.yaml drift is already caught by TestBuild_MatchesEmbedded in
-      # the build-test job (go test -race ./...). Only schema.ts needs checking here.
-      - name: Check for schema.ts drift
-        run: git diff --exit-code -- frontend/src/api/schema.ts
+      - name: Check generated API artifacts
+        run: |
+          git diff --exit-code -- backend/internal/httpd/apispec/openapi.yaml frontend/src/api/schema.ts
+          test -z "$(git ls-files --others --exclude-standard -- backend/internal/httpd/apispec/openapi.yaml frontend/src/api/schema.ts)"

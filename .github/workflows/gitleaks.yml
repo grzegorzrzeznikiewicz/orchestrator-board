@@ -1,9 +1,8 @@
 name: gitleaks
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,6 +10,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
