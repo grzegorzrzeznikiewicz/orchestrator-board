@@ -3073,5 +3073,17 @@
 	"settings.defaultSandbox.description": "新项目运行云会话的位置，以及项目未选择时会话的运行位置。",
 	"settings.defaultSandbox.single": "你的云会话运行的位置。只有一个沙盒可用。",
 	"settings.defaultSandbox.adminOnly": "只有组织管理员可以更改此设置。",
-	"settings.defaultSandbox.saveFailed": "无法保存默认沙盒。请重试。"
+	"settings.defaultSandbox.saveFailed": "无法保存默认沙盒。请重试。",
+	"settings.project.reviewWorkflow": "Review workflow",
+	"settings.project.reviewMode": "Review mode",
+	"settings.project.prReview": "Pull request review",
+	"settings.project.localReview": "Local review",
+	"settings.project.testCommands": "Test commands",
+	"settings.project.localReviewDescription": "Codex implements changes and Claude reviews a captured copy. A pull request is optional. Enter one test command per line; this saves the test plan for the local workflow.",
+	"inspector.localReview": "Local review",
+	"inspector.localReviewCurrent": "Current snapshot",
+	"inspector.localReviewStale": "Outdated snapshot — run review again",
+	"inspector.localReviewSnapshot": "Snapshot",
+	"inspector.localReviewApproved": "Reviewer approved",
+	"inspector.localReviewRun": "Run local review"
 }

@@ -268,6 +268,32 @@ func TestACPReplayLoadLargeHistoryThroughSDK(t *testing.T) {
 	clientR, clientW := io.Pipe()
 	agentR, agentW := io.Pipe()
 	agent := &fakeAgent{loadUpdates: updates}
+	// Bound each transport burst below the SDK's fixed 1024-entry queue.
+	// Otherwise JSON decoding can lose a scheduler race to the pipe reader,
+	// independently of whether AO correctly defers replay normalization.
+	agent.afterLoadUpdate = func(ctx context.Context, delivered int) error {
+		// Leave the final batch to the SDK's response watermark barrier.
+		if delivered%512 != 0 || delivered == len(updates) {
+			return nil
+		}
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for {
+			conv.replayMu.Lock()
+			captured := len(conv.replayUpdates)
+			conv.replayMu.Unlock()
+			if captured >= delivered {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("replay capture did not reach %d updates: %w", delivered, ctx.Err())
+			case <-ticker.C:
+			}
+		}
+	}
 	agent.conn = acpsdk.NewAgentSideConnection(agent, agentW, clientR)
 	conv.conn = acpsdk.NewClientSideConnection(conv, clientW, agentR)
 	t.Cleanup(func() { _ = clientR.Close(); _ = clientW.Close(); _ = agentR.Close(); _ = agentW.Close() })
@@ -276,8 +302,8 @@ func TestACPReplayLoadLargeHistoryThroughSDK(t *testing.T) {
 	defer cancel()
 	conv.beginHistoryReplay("session-1")
 	// Hold the normalization mutex until the SDK response barrier returns.
-	// An inline handler cannot finish even its first update, fills the SDK
-	// queue, and disconnects. Capturing must deliver the complete burst anyway.
+	// An inline handler cannot finish even its first update or pass the capture
+	// barrier. Capturing must deliver all 8192 notifications before normalization.
 	func() {
 		conv.mu.Lock()
 		defer conv.mu.Unlock()

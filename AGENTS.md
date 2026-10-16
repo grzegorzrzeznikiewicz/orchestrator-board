@@ -1,3 +1,15 @@
+# OrchestratorBoard
+
+## Linki projektu
+
+- Jira (projekt OB, tablica 170): https://gamasoftware.atlassian.net/jira/software/projects/OB/boards/170?filter=&groupBy=none
+- Confluence (przestrzeń OB): https://gamasoftware.atlassian.net/wiki/spaces/OB/overview
+
+
+## Upstream instructions
+
+Local workspace rules supplied by the user take precedence over upstream instructions below, including rules about commits and worktrees.
+
 # AGENTS.md
 
 Operational guidance for coding agents working in this repository. Keep changes small, match the current rewrite architecture, and prefer the documented daemon/API boundaries over behavior from the old TypeScript implementation.

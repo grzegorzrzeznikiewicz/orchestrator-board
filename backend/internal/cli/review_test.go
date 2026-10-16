@@ -40,6 +40,16 @@ func reviewServer(t *testing.T, status int, respBody string) (*httptest.Server, 
 
 func aliveDeps() Deps { return Deps{ProcessAlive: func(int) bool { return true }} }
 
+func TestReviewListNamesLocalSnapshotWithoutPR(t *testing.T) {
+	cfg := setReviewEnv(t)
+	srv, _ := reviewServer(t, http.StatusOK, `{"reviews":[{"targetKind":"local","snapshotId":"content-id","title":"Local review","status":"needs_review","prUrl":"","prNumber":0,"targetSha":""}]}`)
+	writeRunFileFor(t, cfg, srv)
+	out, errOut, err := executeCLI(t, aliveDeps(), "review", "ls", "mer-1")
+	if err != nil || !strings.Contains(out, "local") || strings.Contains(out, "#0") {
+		t.Fatalf("local review output=%q stderr=%q err=%v", out, errOut, err)
+	}
+}
+
 // setReviewEnv is setConfigEnv for review commands, which default to the
 // calling AO session: it clears inherited session ids so the suite stays
 // hermetic when it runs inside an AO worker or reviewer.

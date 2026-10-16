@@ -48,7 +48,7 @@ export function openReviewStatesFor(session: WorkspaceSession, reviewStates: PRR
 			.filter((pr) => pr.state === "open" || pr.state === "draft")
 			.map((pr) => pr.url),
 	);
-	return reviewStates.filter((reviewState) => openPRURLs.has(reviewState.prUrl));
+	return reviewStates.filter((reviewState) => reviewState.targetKind === "local" || openPRURLs.has(reviewState.prUrl));
 }
 
 export function reviewIsRunning(openReviewStates: PRReviewState[]): boolean {

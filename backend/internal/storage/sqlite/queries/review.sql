@@ -84,11 +84,11 @@ WHERE id = ?
     OR (? = '' AND reviewer_launch_id = ''));
 
 -- name: InsertReviewRun :exec
-INSERT INTO review_run (id, review_id, session_id, batch_id, harness, trigger_source, pr_url, target_sha, status, verdict, body, github_review_id, created_at, auto_inject_review)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO review_run (id, review_id, session_id, batch_id, harness, trigger_source, pr_url, target_sha, status, verdict, body, github_review_id, created_at, auto_inject_review, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateReviewRunResult :execrows
-UPDATE review_run SET status = ?, verdict = ?, body = ?, github_review_id = ?, auto_inject_review = ? WHERE id = ? AND status = 'running';
+UPDATE review_run SET status = @status, verdict = @verdict, body = @body, github_review_id = @github_review_id, auto_inject_review = @auto_inject_review WHERE id = @id AND status = 'running' AND (target_kind != 'local' OR invalidated_at IS NULL OR @allow_invalidated);
 
 -- name: SupersedeStaleRunningReviewRuns :execrows
 UPDATE review_run SET status = 'failed', body = ? WHERE session_id = ? AND pr_url = ? AND target_sha != ? AND status = 'running' AND verdict = '';
@@ -100,27 +100,27 @@ UPDATE review_run SET status = 'cancelled', body = ? WHERE session_id = ? AND st
 UPDATE review_run SET status = 'cancelled', body = ? WHERE session_id = ? AND harness = ? AND status = 'running' AND verdict = '';
 
 -- name: GetReviewRun :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE id = ?;
 
 -- name: GetReviewRunBySessionPRAndSHA :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND pr_url = ? AND target_sha = ? ORDER BY created_at DESC LIMIT 1;
 
 -- name: GetReviewRunBySessionPRSHAAndHarness :one
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND pr_url = ? AND target_sha = ? AND harness = ? ORDER BY created_at DESC LIMIT 1;
 
 -- name: ListReviewRunsBySession :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? ORDER BY created_at DESC;
 
 -- name: ListRunningReviewRunsBySession :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND status = 'running' AND verdict = '' ORDER BY created_at DESC;
 
 -- name: ListReviewRunsByBatch :many
-SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source
+SELECT id, review_id, session_id, harness, pr_url, target_sha, status, verdict, body, created_at, github_review_id, delivered_at, batch_id, auto_inject_review, trigger_source, target_kind, snapshot_id, snapshot_path, snapshot_observation, snapshot_epoch, invalidated_at, invalidation_reason
 FROM review_run WHERE session_id = ? AND batch_id = ? ORDER BY created_at ASC, id ASC;
 
 -- name: ListCurrentHeadReviewRunsBySession :many
@@ -193,3 +193,18 @@ WHERE status = 'running' AND verdict = '' AND batch_id != ''
 -- name: ArchiveReviewsBySession :exec
 UPDATE review SET is_archived = TRUE, reviewer_handle_id = '', reviewer_launch_id = '',
     controller_generation = '', reviewer_activity_state = 'exited', updated_at = ? WHERE session_id = ?;
+
+-- name: InvalidateLocalReviewRun :exec
+UPDATE review_run SET invalidated_at = ?, invalidation_reason = ?
+WHERE id = ? AND target_kind = 'local' AND invalidated_at IS NULL;
+
+-- name: BeginLocalReviewEditing :exec
+UPDATE sessions SET activity_state='active',activity_last_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+WHERE sessions.id = ? AND (
+ EXISTS (SELECT 1 FROM projects WHERE projects.id=sessions.project_id AND json_extract(config,'$.reviewMode')='local')
+ OR EXISTS (SELECT 1 FROM review_run WHERE session_id=sessions.id AND target_kind='local')
+);
+
+-- name: HasPendingLocalReviewWork :one
+SELECT EXISTS (SELECT 1 FROM conversation_turns
+ WHERE handled_by_session_id = ? AND handled_by_review_id IS NULL AND state IN ('queued','running'));

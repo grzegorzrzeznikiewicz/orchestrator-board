@@ -238,21 +238,32 @@ func (s *Store) InsertReviewRun(ctx context.Context, r domain.ReviewRun) error {
 	if r.TriggerSource == "" {
 		r.TriggerSource = domain.ReviewTriggerManual
 	}
+	if r.TargetKind == "" {
+		r.TargetKind = domain.ReviewTargetPR
+	}
+	if r.TargetKind == domain.ReviewTargetLocal && (r.SnapshotID == "" || r.SnapshotPath == "" || r.PRURL != "" || r.TargetSHA != "") {
+		return errors.New("local review requires a snapshot and cannot target a PR commit")
+	}
 	err := s.qw.InsertReviewRun(ctx, gen.InsertReviewRunParams{
-		ID:               r.ID,
-		ReviewID:         r.ReviewID,
-		SessionID:        r.SessionID,
-		BatchID:          r.BatchID,
-		Harness:          r.Harness,
-		TriggerSource:    r.TriggerSource,
-		PRURL:            r.PRURL,
-		TargetSha:        r.TargetSHA,
-		Status:           r.Status,
-		Verdict:          r.Verdict,
-		Body:             r.Body,
-		GithubReviewID:   r.GithubReviewID,
-		CreatedAt:        r.CreatedAt,
-		AutoInjectReview: r.AutoInjectReview,
+		TargetKind:          string(r.TargetKind),
+		SnapshotID:          r.SnapshotID,
+		SnapshotPath:        r.SnapshotPath,
+		SnapshotObservation: r.SnapshotObservation,
+		SnapshotEpoch:       r.SnapshotEpoch,
+		ID:                  r.ID,
+		ReviewID:            r.ReviewID,
+		SessionID:           r.SessionID,
+		BatchID:             r.BatchID,
+		Harness:             r.Harness,
+		TriggerSource:       r.TriggerSource,
+		PRURL:               r.PRURL,
+		TargetSha:           r.TargetSHA,
+		Status:              r.Status,
+		Verdict:             r.Verdict,
+		Body:                r.Body,
+		GithubReviewID:      r.GithubReviewID,
+		CreatedAt:           r.CreatedAt,
+		AutoInjectReview:    r.AutoInjectReview,
 	})
 	if isSQLiteUnique(err) {
 		return fmt.Errorf("insert review run for session %s pr %s sha %s: %w", r.SessionID, r.PRURL, r.TargetSHA, domain.ErrDuplicateReviewRun)
@@ -266,6 +277,7 @@ func (s *Store) UpdateReviewRunResult(ctx context.Context, id string, status dom
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	n, err := s.qw.UpdateReviewRunResult(ctx, gen.UpdateReviewRunResultParams{
+		AllowInvalidated: status == domain.ReviewRunFailed || status == domain.ReviewRunCancelled,
 		Status:           status,
 		Verdict:          verdict,
 		Body:             body,
@@ -490,22 +502,45 @@ func reviewRunFromRow(r gen.ReviewRun) domain.ReviewRun {
 		deliveredAt = &t
 	}
 	return domain.ReviewRun{
-		ID:               r.ID,
-		ReviewID:         r.ReviewID,
-		SessionID:        r.SessionID,
-		BatchID:          r.BatchID,
-		Harness:          r.Harness,
-		TriggerSource:    r.TriggerSource,
-		PRURL:            r.PRURL,
-		TargetSHA:        r.TargetSha,
-		Status:           r.Status,
-		Verdict:          r.Verdict,
-		Body:             r.Body,
-		GithubReviewID:   r.GithubReviewID,
-		CreatedAt:        r.CreatedAt,
-		DeliveredAt:      deliveredAt,
-		AutoInjectReview: r.AutoInjectReview,
+		TargetKind:          domain.ReviewTargetKind(r.TargetKind),
+		SnapshotID:          r.SnapshotID,
+		SnapshotPath:        r.SnapshotPath,
+		SnapshotObservation: r.SnapshotObservation,
+		SnapshotEpoch:       r.SnapshotEpoch,
+		InvalidatedAt:       optionalReviewTime(r.InvalidatedAt),
+		InvalidationReason:  r.InvalidationReason,
+		ID:                  r.ID,
+		ReviewID:            r.ReviewID,
+		SessionID:           r.SessionID,
+		BatchID:             r.BatchID,
+		Harness:             r.Harness,
+		TriggerSource:       r.TriggerSource,
+		PRURL:               r.PRURL,
+		TargetSHA:           r.TargetSha,
+		Status:              r.Status,
+		Verdict:             r.Verdict,
+		Body:                r.Body,
+		GithubReviewID:      r.GithubReviewID,
+		CreatedAt:           r.CreatedAt,
+		DeliveredAt:         deliveredAt,
+		AutoInjectReview:    r.AutoInjectReview,
 	}
+}
+
+func optionalReviewTime(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	t := value.Time
+	return &t
+}
+
+// InvalidateLocalReviewRun permanently retires current-result/acceptance claims
+// while retaining the review verdict and body as history.
+func (s *Store) InvalidateLocalReviewRun(ctx context.Context, id, reason string, at time.Time) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.qw.InvalidateLocalReviewRun(ctx, gen.InvalidateLocalReviewRunParams{ID: id, InvalidatedAt: sql.NullTime{Time: at, Valid: true}, InvalidationReason: reason})
 }
 
 // ListCurrentHeadReviewRunsForSession returns AO's review passes against the
@@ -572,4 +607,29 @@ func (s *Store) ArchiveReviewsBySession(ctx context.Context, workerID domain.Ses
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.qw.ArchiveReviewsBySession(ctx, gen.ArchiveReviewsBySessionParams{SessionID: workerID, UpdatedAt: now})
+}
+
+// AcquireLocalReviewWorkspace shares admission with the terminal and chat writers.
+func (s *Store) AcquireLocalReviewWorkspace(ctx context.Context, id domain.SessionID) (func(), error) {
+	value, _ := s.localReviewLocks.LoadOrStore(id, newContextMutex())
+	lock, ok := value.(*contextMutex)
+	if !ok {
+		return nil, fmt.Errorf("local review admission lock has unexpected type")
+	}
+	if err := lock.LockContext(ctx); err != nil {
+		return nil, err
+	}
+	return lock.Unlock, nil
+}
+
+// BeginLocalReviewEditing records worker activity before terminal dispatch.
+func (s *Store) BeginLocalReviewEditing(ctx context.Context, id domain.SessionID) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.qw.BeginLocalReviewEditing(ctx, id)
+}
+
+// HasPendingLocalReviewWork includes queued native turns when checking for idle.
+func (s *Store) HasPendingLocalReviewWork(ctx context.Context, id domain.SessionID) (bool, error) {
+	return s.qr.HasPendingLocalReviewWork(ctx, id)
 }

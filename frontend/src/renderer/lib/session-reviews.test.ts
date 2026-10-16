@@ -69,6 +69,12 @@ const reviewState = (number: number, status: PRReviewState["status"]): PRReviewS
 // merge silently re-forked them — pin the behaviour so a second copy can't drift
 // back in unnoticed.
 describe("shared review eligibility helpers", () => {
+	it("allows Local review without a PR", () => {
+		const local = { ...reviewState(0, "needs_review"), targetKind: "local" as const, prUrl: "", targetSha: "", snapshotId: "contents" };
+		const states = openReviewStatesFor(session({ prs: [] }), [local]);
+		expect(states).toEqual([local]);
+		expect(reviewRunDisabled(states, false)).toBe(false);
+	});
 	it("keeps only the review states belonging to a session's open or draft PRs", () => {
 		const target = session({ prs: [pr(1), pr(2, "draft"), pr(3, "merged"), pr(4, "closed")] });
 		const states = [

@@ -3091,5 +3091,17 @@
 	"settings.defaultSandbox.description": "新しいプロジェクトのクラウドセッションを実行する場所と、プロジェクトが選択していない場合のセッションの実行先です。",
 	"settings.defaultSandbox.single": "クラウドセッションの実行場所です。利用できるサンドボックスは 1 つだけです。",
 	"settings.defaultSandbox.adminOnly": "これを変更できるのは組織の管理者だけです。",
-	"settings.defaultSandbox.saveFailed": "デフォルトのサンドボックスを保存できませんでした。もう一度お試しください。"
+	"settings.defaultSandbox.saveFailed": "デフォルトのサンドボックスを保存できませんでした。もう一度お試しください。",
+	"settings.project.reviewWorkflow": "Review workflow",
+	"settings.project.reviewMode": "Review mode",
+	"settings.project.prReview": "Pull request review",
+	"settings.project.localReview": "Local review",
+	"settings.project.testCommands": "Test commands",
+	"settings.project.localReviewDescription": "Codex implements changes and Claude reviews a captured copy. A pull request is optional. Enter one test command per line; this saves the test plan for the local workflow.",
+	"inspector.localReview": "Local review",
+	"inspector.localReviewCurrent": "Current snapshot",
+	"inspector.localReviewStale": "Outdated snapshot — run review again",
+	"inspector.localReviewSnapshot": "Snapshot",
+	"inspector.localReviewApproved": "Reviewer approved",
+	"inspector.localReviewRun": "Run local review"
 }

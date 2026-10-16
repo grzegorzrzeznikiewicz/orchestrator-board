@@ -4271,6 +4271,21 @@ describe("SessionInspector summary reviews", () => {
     );
   });
 
+  it.each([false, true])("starts Local review from the Reviews tab without a PR (legacy auto review: %s)", async (autoReviewEnabled) => {
+    const local = { ...reviewState(0, "needs_review", ""), targetKind: "local", prUrl: "", title: "Local review", snapshotId: "content-id" };
+    const base = commonGetsResponder([], "", [local]);
+    getMock.mockImplementation(async (path: string) => path === "/api/v1/projects/{id}"
+      ? { data: { status: "ok", project: { id: "ws-1", kind: "single_repo", name: "my-app", path: "/repo", repo: "", config: { reviewMode: "local", worker: { agent: "codex" }, reviewers: [{ harness: "claude-code" }] } } } }
+      : base(path));
+    postMock.mockResolvedValue({ data: { created: true, reviews: [local], runs: [], reviewerHandleId: "" } });
+    renderWithQuery(<SessionInspector session={session([], { autoReviewEnabled })} />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Reviews" }));
+    expect(screen.queryByText("No pull request opened yet.")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Run local review" }));
+    await waitFor(() => expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/trigger")).toHaveLength(1));
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/trigger")[0][1].body.prUrl).toBeUndefined();
+  });
+
   it("hides Reviews and the review preference when the session has no PR", async () => {
     mockCommonGets();
     renderWithQuery(<SessionInspector session={session([], { outputType: "pr" })} />);

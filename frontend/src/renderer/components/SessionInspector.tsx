@@ -1,5 +1,6 @@
 import { FileText, MessageSquare } from "lucide-react";
 import { AppLink } from "./AppLink";
+import { LocalReviewHistory } from "./LocalReviewHistory";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -235,6 +236,14 @@ export const SessionInspector = memo(function SessionInspector({
 		session ? Boolean(state.inspectorSessions[sessionUiKey(session.id, hostId)]?.browserUnseen) : false,
 	);
 	const inspectorQueryClient = useQueryClient();
+	const localReviewProject = useQuery({
+		queryKey: hostId ? ["project-config", hostId, session?.workspaceId] : ["project-config", session?.workspaceId],
+		enabled: Boolean(session && !session.cloud && !onlyBrowser && session.workspaceId !== STANDALONE_WORKSPACE_ID),
+		queryFn: async () => {
+			const { data, error } = await clientForSessionHost(hostId).GET("/api/v1/projects/{id}", { params: { path: { id: session!.workspaceId } } });
+			return error ? undefined : projectConfig(data?.project);
+		},
+	});
 	const localFilesChangedCount = useSessionWorkspaceFilesChangedCount(
 		onlyBrowser || session?.cloud ? undefined : session?.id,
 		hostId,
@@ -271,7 +280,7 @@ export const SessionInspector = memo(function SessionInspector({
 	const openFilesView = useCallback(() => setView("files"), [setView]);
 	// A persisted/controlled Reviews selection can outlive the last reviewable PR.
 	// Keep the shell on a real, visible tab instead of rendering an empty, unlabelled body.
-	const reviewsAvailable = reviewsTabVisible(session);
+	const reviewsAvailable = reviewsTabVisible(session) || localReviewProject.data?.reviewMode === "local";
 	const availableViewDefs = onlyBrowser ? VIEW_DEFS.filter((entry) => entry.id === "browser")
 		: VIEW_DEFS.filter((entry) => (!hostId || entry.id !== "browser" || browserView) && (reviewsAvailable || entry.id !== "reviews")
 			// The host passes a side chat view only where side chats can run.
@@ -283,9 +292,10 @@ export const SessionInspector = memo(function SessionInspector({
 	useEffect(() => {
 		// Until the session loads, its tabs are unknown: keep the requested view.
 		if (view === requestedView || (!sessionLoaded && !onlyBrowser)) return;
+		if (requestedView === "reviews" && !session?.cloud && localReviewProject.isFetching) return;
 		setInternalView(view);
 		onViewChange?.(view);
-	}, [onViewChange, onlyBrowser, requestedView, sessionLoaded, view]);
+	}, [onViewChange, onlyBrowser, requestedView, sessionLoaded, view, session?.cloud, localReviewProject.isFetching]);
 	const tabs = availableViewDefs.map((entry) => {
 		const label = t(entry.labelKey);
 		return {
@@ -1289,16 +1299,16 @@ function LocalReviewsSection({
 	onWorkerMessageSent?: () => void;
 }) {
 	const { t } = useTranslation();
-	const hasPr = sortedPRs(session).length > 0;
 	const queryClient = useQueryClient();
 	const workspaceKey = workspaceQueryKeyForHost(hostId);
 	const reviewsKey = sessionReviewsQueryKey(session.id, hostId);
 	const [rerunConfirmation, setRerunConfirmation] = useState<{ ownerKey: string; heads: string } | null>(null);
 	const reviewsQuery = useQuery({
-		...sessionReviewsQueryOptions(session, hasPr, undefined, hostId),
+		...sessionReviewsQueryOptions(session, true, undefined, hostId),
 		refetchInterval: (query) => {
 			const reviews = query.state.data?.reviews ?? [];
 			if (reviews.some((review) => review.status === "running")) return 2500;
+			if (reviews.some((review) => review.targetKind === "local")) return 10_000;
 			return session.autoReviewEnabled === true ? 10_000 : false;
 		},
 	});
@@ -1306,7 +1316,7 @@ function LocalReviewsSection({
 	useEnsureAgentReadiness({ hostId });
 	const projectConfigQuery = useQuery({
 		queryKey: hostId ? ["project-config", hostId, session.workspaceId] : ["project-config", session.workspaceId],
-		enabled: hasPr,
+		enabled: true,
 		queryFn: async () => {
 			if (usePreviewData) return mockProjectConfig();
 			const { data, error } = await clientForSessionHost(hostId).GET("/api/v1/projects/{id}", {
@@ -1327,7 +1337,7 @@ function LocalReviewsSection({
 	const [reviewerMode, setReviewerMode] = useState(session.reviewerConfig?.mode ?? "");
 	const reviewerOwnerKey = sessionUiKey(session.id, hostId);
 	const openReviewStates = openReviewStatesFor(session, reviewsQuery.data?.reviews ?? []);
-	const reviewHeads = openReviewStates.map((review) => `${review.prUrl}@${review.targetSha}`).sort().join("\n");
+	const reviewHeads = openReviewStates.map((review) => review.targetKind === "local" ? `local@${review.snapshotId}` : `${review.prUrl}@${review.targetSha}`).sort().join("\n");
 	const currentHeadReviewed = openReviewStates.some((review) => review.latestRun?.targetSha === review.targetSha && (review.latestRun.status === "complete" || review.latestRun.status === "delivered"));
 	useEffect(() => {
 		setRerunConfirmation((current) => current && (current.ownerKey !== reviewerOwnerKey || current.heads !== reviewHeads) ? null : current);
@@ -2103,6 +2113,9 @@ function MergedReviewsSection({
 	}).filter((group) =>
 		Boolean(group.ao || (group.github && (group.github.entries.length > 0 || group.github.unresolved > 0))),
 	);
+	if (openReviewStates.some((state) => state.targetKind === "local")) {
+		return <LocalReviewHistory runs={runs} />;
+	}
 	return (
 		<InspectorReviewsView
 			externalLink={ProductExternalLink}
@@ -2263,7 +2276,7 @@ function ReviewPanel({
 	isInstallingCloudHarness = false,
 	onCloudReviewerHarnessChange,
 	onCloudInstallHarness,
-	autoReviewEnabled,
+	autoReviewEnabled: sessionAutoReviewEnabled,
 	session,
 	hostId,
 	config,
@@ -2331,6 +2344,8 @@ function ReviewPanel({
 	onCloudInstallHarness?: () => void;
 }) {
 	const { t } = useTranslation();
+	const localReview = config?.reviewMode === "local" || reviewStates.some((state) => state.targetKind === "local");
+	const autoReviewEnabled = !localReview && sessionAutoReviewEnabled;
 	const latestAutoFailure = reviewStates
 		.map((review) => review.latestRun)
 		.filter(
@@ -2349,7 +2364,7 @@ function ReviewPanel({
 		const timer = window.setTimeout(() => setDismissedAutoFailureId(latestAutoFailure.id), 10_000);
 		return () => window.clearTimeout(timer);
 	}, [dismissedAutoFailureId, latestAutoFailure]);
-	if (sortedPRs(session).length === 0) {
+	if (sortedPRs(session).length === 0 && !localReview) {
 		return <Section surface={false} title={t("inspector.review.controls")}><p className={inspectorEmptyClass}>{t("inspector.noPROpened")}</p></Section>;
 	}
 	if (isLoading) {
@@ -2377,7 +2392,7 @@ function ReviewPanel({
 	const reviewRunning = reviewIsRunning(openReviewStates);
 	const reviewLive = reviewHasLiveActivity(openReviewStates, reviewerActivityState, hasReviewerSession);
 	const reviewHasRun = reviewRunning || Boolean(latest);
-	const runAction = reviewSessionRunAction(openReviewStates, isTriggering);
+	const runAction = localReview && !reviewRunning ? t("inspector.localReviewRun") : reviewSessionRunAction(openReviewStates, isTriggering);
 	const runDisabled = isKilling || isSwitchingReviewer || (cloud && !cloudReviewerReady) || reviewRunDisabled(openReviewStates, isTriggering);
 	const primaryReviewActionLabel = reviewRunning
 		? isCancelling
@@ -2505,7 +2520,7 @@ function ReviewPanel({
 								</div>
 							))
 						: null}
-					<InspectorPolicyRow
+					{!localReview && <InspectorPolicyRow
 						checked={autoReviewEnabled}
 						description={t("inspector.autoReviewDescription")}
 						disabled={isAutoReviewSaving}
@@ -2513,7 +2528,7 @@ function ReviewPanel({
 						label={t("inspector.autoReview")}
 						onCheckedChange={onAutoReviewChange}
 						tooltipClassName="max-w-64"
-					/>
+					/>}
 					<div className="flex min-h-8 min-w-0 items-center justify-between gap-3 py-1">
 						<span className="text-sm text-settings-label">{t("inspector.review.session")}</span>
 						<div className="flex min-w-0 items-center justify-end gap-1.5">

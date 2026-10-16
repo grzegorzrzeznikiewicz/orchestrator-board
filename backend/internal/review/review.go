@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/localsnapshot"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
@@ -93,6 +94,8 @@ type Projects interface {
 
 // Deps wires the engine.
 type Deps struct {
+	// DataDir is the daemon-owned root for immutable local review snapshots.
+	DataDir string
 	// HarnessUse, when set, is held across each reviewer launch.
 	HarnessUse HarnessUseGate
 	Store      Store
@@ -110,14 +113,20 @@ type Deps struct {
 
 // Engine is the core code-review engine.
 type Engine struct {
-	harnessUse HarnessUseGate
-	store      Store
-	sessions   Sessions
-	prs        PRs
-	projects   Projects
-	launcher   Launcher
-	clock      func() time.Time
-	newID      func() string
+	localDataDir string
+	localEpoch   string
+	localMu      sync.Mutex
+	localGuards  map[string]*localsnapshot.Guard
+	localWG      sync.WaitGroup
+	localClosed  bool
+	harnessUse   HarnessUseGate
+	store        Store
+	sessions     Sessions
+	prs          PRs
+	projects     Projects
+	launcher     Launcher
+	clock        func() time.Time
+	newID        func() string
 
 	chatRecoveryDone <-chan struct{}
 
@@ -141,6 +150,9 @@ func New(d Deps) *Engine {
 		newID = uuid.NewString
 	}
 	return &Engine{
+		localDataDir: d.DataDir,
+		localEpoch:   uuid.NewString(),
+		localGuards:  make(map[string]*localsnapshot.Guard),
 		store:        d.Store,
 		harnessUse:   d.HarnessUse,
 		sessions:     d.Sessions,
@@ -328,6 +340,11 @@ func (e *Engine) TriggerWithOptions(ctx stdctx.Context, workerID domain.SessionI
 	}
 	if worker.Metadata.WorkspacePath == "" {
 		return TriggerResult{}, fmt.Errorf("%w: worker session %q has no workspace to review", ErrInvalid, workerID)
+	}
+	if cfg, err := e.reviewProjectConfig(ctx, worker.ProjectID); err != nil {
+		return TriggerResult{}, err
+	} else if cfg.EffectiveReviewMode() == domain.ReviewTargetLocal {
+		return e.triggerLocalLocked(ctx, worker, cfg, opts)
 	}
 
 	prs, err := e.prs.ListPRsBySession(ctx, workerID)
@@ -992,6 +1009,9 @@ func (e *Engine) RestoreReviewer(ctx stdctx.Context, workerID domain.SessionID) 
 	if err != nil {
 		return RestoreReviewerResult{}, err
 	}
+	if local, err := e.localRestoreRequired(ctx, worker); local || err != nil {
+		return RestoreReviewerResult{}, err
+	}
 	return e.restoreReviewerLocked(ctx, workerID, worker, harness, config)
 }
 
@@ -1044,6 +1064,9 @@ func (e *Engine) restoreRecoverableChatReviewer(ctx stdctx.Context, review domai
 }
 
 func (e *Engine) restorePersistedChatReviewerLocked(ctx stdctx.Context, worker domain.SessionRecord, review domain.Review, previousRuns []domain.ReviewRun) (RestoreReviewerResult, error) {
+	if local, err := e.localRestoreRequired(ctx, worker); local || err != nil {
+		return RestoreReviewerResult{}, err
+	}
 	if review.ReviewerHandleID != "" {
 		alive, err := e.launcher.Alive(ctx, review.ReviewerHandleID, review.ReviewerLaunchID)
 		if err != nil {
@@ -1102,6 +1125,9 @@ func (e *Engine) restoreReviewerLocked(
 	harness domain.ReviewerHarness,
 	config domain.AgentConfig,
 ) (RestoreReviewerResult, error) {
+	if local, err := e.localRestoreRequired(ctx, worker); local || err != nil {
+		return RestoreReviewerResult{}, err
+	}
 	reviewRows, err := e.store.ListReviewsBySession(ctx, workerID)
 	if err != nil {
 		return RestoreReviewerResult{}, err
@@ -1485,6 +1511,17 @@ func (e *Engine) List(ctx stdctx.Context, workerID domain.SessionID) (SessionRev
 }
 
 func (e *Engine) listLocked(ctx stdctx.Context, workerID domain.SessionID, selectedHarness domain.ReviewerHarness) (SessionReviews, error) {
+	if worker, ok, err := e.sessions.GetSession(ctx, workerID); err != nil {
+		return SessionReviews{}, err
+	} else if ok {
+		cfg, err := e.reviewProjectConfig(ctx, worker.ProjectID)
+		if err != nil {
+			return SessionReviews{}, err
+		}
+		if cfg.EffectiveReviewMode() == domain.ReviewTargetLocal {
+			return e.listLocalLocked(ctx, worker, selectedHarness)
+		}
+	}
 	runs, err := e.store.ListReviewRunsBySession(ctx, workerID)
 	if err != nil {
 		return SessionReviews{}, err
@@ -1932,7 +1969,7 @@ func (e *Engine) projectReviewerSelection(
 		if proj, ok, err := e.projects.GetProject(ctx, string(worker.ProjectID)); err != nil {
 			return "", domain.AgentConfig{}, err
 		} else if ok {
-			cfg = proj.Config
+			cfg = proj.Config.WithDefaults()
 		}
 	}
 	if len(cfg.Reviewers) > 0 {

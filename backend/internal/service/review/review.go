@@ -464,8 +464,18 @@ func (s *Service) TriggerRequested(ctx context.Context, workerID domain.SessionI
 	if req.Rerun && req.RejectReviewedHead {
 		return TriggerOutcome{}, fmt.Errorf("%w: rerun cannot be combined with rejecting an already-reviewed head", ErrInvalid)
 	}
-	if err := s.refreshPRs(ctx, workerID, strings.TrimSpace(req.PRURL)); err != nil {
-		return TriggerOutcome{}, err
+	localReview := false
+	if s.engine != nil {
+		var err error
+		localReview, err = s.engine.UsesLocalReview(ctx, workerID)
+		if err != nil {
+			return TriggerOutcome{}, err
+		}
+	}
+	if !localReview {
+		if err := s.refreshPRs(ctx, workerID, strings.TrimSpace(req.PRURL)); err != nil {
+			return TriggerOutcome{}, err
+		}
 	}
 	result, err := s.triggerWithOptions(ctx, workerID, reviewcore.TriggerOptions{
 		Harness:            req.Harness,
@@ -480,7 +490,7 @@ func (s *Service) TriggerRequested(ctx context.Context, workerID domain.SessionI
 		return TriggerOutcome{}, err
 	}
 	outcome := TriggerOutcome{TriggerResult: result}
-	if !req.EnableAutoInject {
+	if !req.EnableAutoInject || localReview {
 		return outcome, nil
 	}
 	// Only after a pass exists: a rejected or failed trigger must not change
@@ -810,6 +820,18 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 	if run.SessionID != workerID {
 		return domain.ReviewRun{}, fmt.Errorf("%w: review run %q does not belong to worker %q", ErrInvalid, runID, workerID)
 	}
+	if run.TargetKind == domain.ReviewTargetLocal {
+		if githubReviewID != "" {
+			return domain.ReviewRun{}, fmt.Errorf("%w: a local result cannot reference a provider review", ErrInvalid)
+		}
+		if s.engine == nil {
+			return domain.ReviewRun{}, fmt.Errorf("%w: local snapshot cannot be verified", ErrConflict)
+		}
+		if err := s.engine.ValidateLocalRun(ctx, run); err != nil {
+			return domain.ReviewRun{}, err
+		}
+		run.Current = true
+	}
 
 	switch run.Status {
 	case domain.ReviewRunRunning:
@@ -820,18 +842,28 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 		if !found {
 			return domain.ReviewRun{}, fmt.Errorf("%w: worker session %q", ErrNotFound, workerID)
 		}
-		updated, err := s.store.UpdateReviewRunResult(ctx, run.ID, domain.ReviewRunComplete, verdict, body, githubReviewID, session.AutoInjectReview)
+		autoInject := session.AutoInjectReview && run.TargetKind != domain.ReviewTargetLocal
+		updated, err := s.store.UpdateReviewRunResult(ctx, run.ID, domain.ReviewRunComplete, verdict, body, githubReviewID, autoInject)
 		if err != nil {
 			return domain.ReviewRun{}, err
 		}
 		if !updated {
+			if run.TargetKind == domain.ReviewTargetLocal {
+				return domain.ReviewRun{}, fmt.Errorf("%w: local review was invalidated before result storage", ErrConflict)
+			}
 			return domain.ReviewRun{}, fmt.Errorf("%w: review run %q is not running", errRunSuperseded, runID)
 		}
 		run.Status = domain.ReviewRunComplete
 		run.Verdict = verdict
 		run.Body = body
 		run.GithubReviewID = githubReviewID
-		run.AutoInjectReview = session.AutoInjectReview
+		run.AutoInjectReview = autoInject
+		if run.TargetKind == domain.ReviewTargetLocal {
+			if err := s.engine.ValidateLocalRun(ctx, run); err != nil {
+				return domain.ReviewRun{}, err
+			}
+			run.Current = true
+		}
 		// Only on the real running -> complete transition. Re-submitting an
 		// already-complete run returns early below, so telemetry stays idempotent
 		// the same way the store does.

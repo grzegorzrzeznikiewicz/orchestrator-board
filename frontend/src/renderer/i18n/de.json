@@ -3091,5 +3091,17 @@
 	"settings.defaultSandbox.description": "Wo neue Projekte ihre Cloud-Sitzungen ausführen und wohin Sitzungen gehen, wenn ein Projekt keine gewählt hat.",
 	"settings.defaultSandbox.single": "Wo deine Cloud-Sitzungen laufen. Es ist nur eine Sandbox verfügbar.",
 	"settings.defaultSandbox.adminOnly": "Nur Organisationsadmins können das ändern.",
-	"settings.defaultSandbox.saveFailed": "Die Standard-Sandbox konnte nicht gespeichert werden. Versuche es erneut."
+	"settings.defaultSandbox.saveFailed": "Die Standard-Sandbox konnte nicht gespeichert werden. Versuche es erneut.",
+	"settings.project.reviewWorkflow": "Review workflow",
+	"settings.project.reviewMode": "Review mode",
+	"settings.project.prReview": "Pull request review",
+	"settings.project.localReview": "Local review",
+	"settings.project.testCommands": "Test commands",
+	"settings.project.localReviewDescription": "Codex implements changes and Claude reviews a captured copy. A pull request is optional. Enter one test command per line; this saves the test plan for the local workflow.",
+	"inspector.localReview": "Local review",
+	"inspector.localReviewCurrent": "Current snapshot",
+	"inspector.localReviewStale": "Outdated snapshot — run review again",
+	"inspector.localReviewSnapshot": "Snapshot",
+	"inspector.localReviewApproved": "Reviewer approved",
+	"inspector.localReviewRun": "Run local review"
 }

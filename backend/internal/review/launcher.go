@@ -65,6 +65,8 @@ type Launcher interface {
 
 // LaunchSpec is the engine's request to (re)launch a reviewer for one pass.
 type LaunchSpec struct {
+	TargetKind      domain.ReviewTargetKind
+	SnapshotID      string
 	RunID           string
 	BatchID         string
 	ReviewSessionID string

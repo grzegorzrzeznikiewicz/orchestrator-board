@@ -1471,6 +1471,15 @@ func (c *Controller) sendLocked(
 		err     error
 	)
 	if c.reviewID == "" {
+		if admission, ok := c.store.(ports.LocalReviewWorkspace); ok {
+			release, lockErr := admission.AcquireLocalReviewWorkspace(ctx, c.sessionID)
+			if lockErr != nil {
+				return domain.ConversationTurn{}, lockErr
+			}
+			defer release()
+		}
+	}
+	if c.reviewID == "" {
 		created, err = c.store.AppendUserMessage(ctx, c.conversation.ID, c.sessionID, c.generation, record, turnID, now)
 	} else {
 		created, err = c.store.AppendReviewUserMessage(ctx, c.conversation.ID, c.sessionID, c.reviewID, c.generation, record, turnID, now)

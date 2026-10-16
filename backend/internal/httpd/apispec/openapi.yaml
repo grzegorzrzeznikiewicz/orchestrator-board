@@ -15167,6 +15167,8 @@ components:
           type: string
         previousRun:
           $ref: '#/components/schemas/ReviewRun'
+        snapshotId:
+          type: string
         status:
           enum:
           - needs_review
@@ -15174,6 +15176,11 @@ components:
           - up_to_date
           - changes_requested
           - ineligible
+          type: string
+        targetKind:
+          enum:
+          - pr
+          - local
           type: string
         targetSha:
           type: string
@@ -15326,6 +15333,11 @@ components:
           items:
             type: string
           type: array
+        reviewMode:
+          enum:
+          - pr
+          - local
+          type: string
         reviewers:
           items:
             $ref: '#/components/schemas/DomainReviewerConfig'
@@ -15333,6 +15345,10 @@ components:
         sessionPrefix:
           type: string
         symlinks:
+          items:
+            type: string
+          type: array
+        testCommands:
           items:
             type: string
           type: array
@@ -15848,6 +15864,8 @@ components:
         createdAt:
           format: date-time
           type: string
+        current:
+          type: boolean
         deliveredAt:
           format: date-time
           type:
@@ -15859,13 +15877,27 @@ components:
           type: string
         id:
           type: string
+        invalidatedAt:
+          format: date-time
+          type:
+          - "null"
+          - string
+        invalidationReason:
+          type: string
         prUrl:
           type: string
         reviewId:
           type: string
         sessionId:
           type: string
+        snapshotId:
+          type: string
         status:
+          type: string
+        targetKind:
+          enum:
+          - pr
+          - local
           type: string
         targetSha:
           type: string

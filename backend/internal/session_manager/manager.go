@@ -4750,6 +4750,16 @@ func (m *Manager) send(ctx context.Context, id domain.SessionID, message, client
 			}
 		}
 	}
+	if admission, ok := m.store.(ports.LocalReviewWorkspace); ok {
+		release, err := admission.AcquireLocalReviewWorkspace(ctx, id)
+		if err != nil {
+			return err
+		}
+		defer release()
+		if err := admission.BeginLocalReviewEditing(ctx, id); err != nil {
+			return err
+		}
+	}
 	outcome, err := m.messenger.DeliverWithPostWrite(ctx, id, message, afterWrite)
 	if err != nil {
 		return fmt.Errorf("send %s: %w", id, err)
