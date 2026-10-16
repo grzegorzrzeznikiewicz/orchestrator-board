@@ -789,6 +789,7 @@ type fakeAgent struct {
 	deletedForks        []string
 	loadUpdates         []acpsdk.SessionUpdate
 	loadUpdateBatches   [][]acpsdk.SessionUpdate
+	afterLoadUpdate     func(context.Context, int) error
 	blockLoadCall       int
 	loadStarted         chan struct{}
 	failLoadFrom        int   // LoadSession calls >= this number return failLoadErr
@@ -1086,6 +1087,7 @@ func (a *fakeAgent) LoadSession(ctx context.Context, params acpsdk.LoadSessionRe
 	started := a.loadStarted
 	failLoad := a.failLoadFrom > 0 && loadCall >= a.failLoadFrom
 	failLoadErr := a.failLoadErr
+	afterUpdate := a.afterLoadUpdate
 	a.mu.Unlock()
 	if failLoad {
 		return acpsdk.LoadSessionResponse{}, failLoadErr
@@ -1097,9 +1099,14 @@ func (a *fakeAgent) LoadSession(ctx context.Context, params acpsdk.LoadSessionRe
 		<-ctx.Done()
 		return acpsdk.LoadSessionResponse{}, ctx.Err()
 	}
-	for _, update := range updates {
+	for i, update := range updates {
 		if err := a.conn.SessionUpdate(ctx, acpsdk.SessionNotification{SessionId: params.SessionId, Update: update}); err != nil {
 			return acpsdk.LoadSessionResponse{}, err
+		}
+		if afterUpdate != nil {
+			if err := afterUpdate(ctx, i+1); err != nil {
+				return acpsdk.LoadSessionResponse{}, err
+			}
 		}
 	}
 	return acpsdk.LoadSessionResponse{}, nil
