@@ -11,6 +11,9 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	workers: process.env.CI ? 2 : undefined,
 	retries: process.env.CI ? 1 : 0,
+	// CI can still be loading the renderer's lazy session modules after goto.
+	// Retry the readiness condition instead of failing a healthy slow startup.
+	expect: { timeout: process.env.CI ? 15_000 : 5_000 },
 	reporter: process.env.CI
 		? [["list"], ["html", { open: "never" }], ["junit", { outputFile: "test-results/playwright.xml" }]]
 		: "list",

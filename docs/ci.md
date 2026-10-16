@@ -120,7 +120,11 @@ Local Playwright needs Chromium installed from the matching frontend dependency
 (`npx playwright install chromium` from `frontend/`). CI supplies browsers in the
 pinned container. Unit reports and Playwright HTML/JUnit reports, screenshots and
 failure traces have seven-day artifact retention. CI uses two browser workers
-and one retry to keep the load bounded. Renderer smoke uses a fake
+and one retry to keep the load bounded. Web-first assertions have a 15-second
+budget in CI (5 seconds locally), allowing the lazy renderer modules to finish
+loading on hosted runners; successful assertions continue immediately. The
+30-second default test deadline and explicit performance thresholds still apply.
+Renderer smoke uses a fake
 bridge and does not replace packaged-app E2E.
 
 Cloud/mobile, Windows regression, native macOS helper and Docker commands remain
