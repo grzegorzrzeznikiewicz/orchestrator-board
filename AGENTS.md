@@ -17,10 +17,15 @@ From the repo root unless noted:
 ```bash
 npm run lint                         # backend go test ./... + golangci-lint v2.13.2
 npm run frontend:typecheck           # frontend TypeScript check
+npm run frontend:lint                # frontend ESLint + lint-rule regression checks
+npm run ci:test                      # CI change selection + required-result contract
 npm run sqlc                         # regenerate backend/internal/storage/sqlite/gen from queries/schema
 npm run api                          # regenerate OpenAPI spec + frontend TS types (see API contract changes below)
 npx @redwoodjs/agent-ci run --all    # local workflow validation; requires Docker socket
 ```
+
+See `docs/ci.md` for required PR checks, local verification, the ESLint baseline,
+manual desktop builds, and activation of the final `CI / required` merge check.
 
 Backend-specific checks:
 

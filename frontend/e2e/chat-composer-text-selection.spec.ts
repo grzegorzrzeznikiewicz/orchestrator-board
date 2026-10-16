@@ -139,7 +139,8 @@ test("clicking chat whitespace and composer padding keeps the draft caret positi
 test("typed chat composer text is visibly selected with a pointer drag @T0", async ({ page }) => {
 	const composer = await openChatWithDraft(page);
 
-	const textBounds = await composer.evaluate((element) => {
+	const textBounds = await composer.evaluate(async (element) => {
+		await document.fonts.ready;
 		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
 		const textNodes: Text[] = [];
 		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -157,7 +158,9 @@ test("typed chat composer text is visibly selected with a pointer drag @T0", asy
 		const firstRect = firstRange.getBoundingClientRect();
 		const lastRect = lastRange.getBoundingClientRect();
 		return {
-			startX: lastRect.right - 1,
+			// Start beyond the narrow trailing period: Chromium can interpret a hit
+			// inside it as dragging the collapsed caret instead of selecting text.
+			startX: lastRect.right + 2,
 			startY: lastRect.top + lastRect.height / 2,
 			endX: firstRect.left + 1,
 			endY: firstRect.top + firstRect.height / 2,

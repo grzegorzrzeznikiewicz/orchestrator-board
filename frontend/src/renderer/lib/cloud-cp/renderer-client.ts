@@ -18,7 +18,6 @@ const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
 const MAIN_PROCESS_TOKEN = "delegated-to-main-process";
 
 function bridgeRequest(): CloudCpBridgeRequest | undefined {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const w = window as any;
 	return (w.aoBridge?.cloudCp?.request ?? w.ao?.cloudCp?.request) as CloudCpBridgeRequest | undefined;
 }
