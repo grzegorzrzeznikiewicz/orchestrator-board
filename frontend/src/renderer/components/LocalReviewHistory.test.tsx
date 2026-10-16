@@ -13,6 +13,25 @@ const approved: ReviewRunFacts = {
 };
 
 describe("LocalReviewHistory", () => {
+	it("opens the newest round when timestamps are equal", () => {
+		render(<LocalReviewHistory runs={[{...approved,id:"old",round:1,body:"Older round body"},{...approved,id:"new",round:2,body:"Newest round body"}]} />);
+		expect(screen.getByText("Newest round body")).toBeVisible();
+		expect(screen.getByText("Older round body")).not.toBeVisible();
+	});
+	it("shows round, locations and separates required changes from suggestions", () => {
+		render(<LocalReviewHistory runs={[{...approved,round:2,verdict:"changes_requested",localResult:{version:1,snapshotId:approved.snapshotId!,round:2,outcome:"changes_requested",summary:"Validation missing",findings:[{kind:"required",path:"new.go",line:4,reason:"Invalid input is saved"},{kind:"suggestion",path:"new.go",line:8,reason:"Consider a clearer name"}]}}]} />);
+		expect(screen.getByText("Round 2")).toBeVisible();
+		expect(screen.getByText("Required change")).toBeVisible();
+		expect(screen.getByText("Suggestion")).toBeVisible();
+		expect(screen.getByText("new.go:4")).toBeVisible();
+		expect(screen.getByText("Invalid input is saved")).toBeVisible();
+	});
+	it("shows a failed review even after its snapshot becomes stale", () => {
+		render(<LocalReviewHistory runs={[{...approved,current:false,status:"failed",verdict:"",body:"Claude timed out"}]} />);
+		expect(screen.getByText("Failed")).toBeVisible();
+		expect(screen.queryByText("Reviewer approved")).not.toBeInTheDocument();
+		expect(screen.getByText("Claude timed out")).toBeVisible();
+	});
 	it("shows the full snapshot identity and a reviewer verdict", () => {
 		render(<LocalReviewHistory runs={[approved]} />);
 		expect(screen.getByText("Reviewer approved")).toBeVisible();

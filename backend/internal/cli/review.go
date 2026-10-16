@@ -23,24 +23,26 @@ const (
 
 // reviewRun mirrors the daemon's domain.ReviewRun for the CLI client.
 type reviewRun struct {
-	TargetKind         string     `json:"targetKind,omitempty"`
-	SnapshotID         string     `json:"snapshotId,omitempty"`
-	Current            bool       `json:"current,omitempty"`
-	InvalidatedAt      *time.Time `json:"invalidatedAt,omitempty"`
-	InvalidationReason string     `json:"invalidationReason,omitempty"`
-	ID                 string     `json:"id"`
-	ReviewID           string     `json:"reviewId"`
-	SessionID          string     `json:"sessionId"`
-	BatchID            string     `json:"batchId"`
-	Harness            string     `json:"harness"`
-	PRURL              string     `json:"prUrl"`
-	TargetSHA          string     `json:"targetSha"`
-	Status             string     `json:"status"`
-	Verdict            string     `json:"verdict"`
-	Body               string     `json:"body"`
-	GithubReviewID     string     `json:"githubReviewId"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	DeliveredAt        *time.Time `json:"deliveredAt,omitempty"`
+	Round              int             `json:"round,omitempty"`
+	LocalResult        json.RawMessage `json:"localResult,omitempty"`
+	TargetKind         string          `json:"targetKind,omitempty"`
+	SnapshotID         string          `json:"snapshotId,omitempty"`
+	Current            bool            `json:"current,omitempty"`
+	InvalidatedAt      *time.Time      `json:"invalidatedAt,omitempty"`
+	InvalidationReason string          `json:"invalidationReason,omitempty"`
+	ID                 string          `json:"id"`
+	ReviewID           string          `json:"reviewId"`
+	SessionID          string          `json:"sessionId"`
+	BatchID            string          `json:"batchId"`
+	Harness            string          `json:"harness"`
+	PRURL              string          `json:"prUrl"`
+	TargetSHA          string          `json:"targetSha"`
+	Status             string          `json:"status"`
+	Verdict            string          `json:"verdict"`
+	Body               string          `json:"body"`
+	GithubReviewID     string          `json:"githubReviewId"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	DeliveredAt        *time.Time      `json:"deliveredAt,omitempty"`
 }
 
 type reviewState struct {
@@ -97,10 +99,11 @@ type reviewRunResponse struct {
 
 // submitReviewItem mirrors controllers.SubmitReviewItem.
 type submitReviewItem struct {
-	RunID          string `json:"runId"`
-	Verdict        string `json:"verdict"`
-	Body           string `json:"body,omitempty"`
-	GithubReviewID string `json:"githubReviewId,omitempty"`
+	LocalResult    json.RawMessage `json:"localResult,omitempty"`
+	RunID          string          `json:"runId"`
+	Verdict        string          `json:"verdict"`
+	Body           string          `json:"body,omitempty"`
+	GithubReviewID string          `json:"githubReviewId,omitempty"`
 }
 
 // submitReviewRequest mirrors controllers.SubmitReviewInput.
@@ -198,7 +201,7 @@ func newReviewSubmitCommand(ctx *commandContext) *cobra.Command {
 	var opts reviewSubmitOptions
 	cmd := &cobra.Command{
 		Use:   "submit [worker-session-id]",
-		Short: "Record a reviewer's result for a worker's PR",
+		Short: "Record a reviewer's result for a worker's PR or local snapshot",
 		Args:  atMostOneArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return ctx.submitReview(cmd, args, opts)
@@ -210,8 +213,8 @@ func newReviewSubmitCommand(ctx *commandContext) *cobra.Command {
 		return pflag.NormalizedName(strings.ReplaceAll(name, "_", "-"))
 	})
 	cmd.Flags().StringVar(&opts.session, "session", "", "Worker session id (or pass it as the positional argument)")
-	cmd.Flags().StringVar(&opts.runID, "run", "", "Review run id (required)")
-	cmd.Flags().StringVar(&opts.verdict, "verdict", "", "Review verdict: approved or changes_requested (required)")
+	cmd.Flags().StringVar(&opts.runID, "run", "", "Review run id (required without --reviews)")
+	cmd.Flags().StringVar(&opts.verdict, "verdict", "", "PR review verdict: approved or changes_requested (required without --reviews)")
 	cmd.Flags().StringVar(&opts.body, "body", "", "Review body: a path to a Markdown file, or - to read from stdin (so nothing is written into the worktree)")
 	cmd.Flags().StringVar(&opts.reviewID, "review-id", "", "Id of the GitHub PR review just posted (the .id from the gh api POST that created the review)")
 	cmd.Flags().StringVar(&opts.reviews, "reviews", "", "JSON review results array or object: a path, or - to read from stdin")
@@ -288,7 +291,7 @@ func (c *commandContext) submitReviewBatch(cmd *cobra.Command, session string, o
 	// not a success to print.
 	if len(res.Reviews) > 0 {
 		for _, run := range res.Reviews {
-			if strings.TrimSpace(run.ID) == "" || strings.TrimSpace(run.Verdict) == "" {
+			if strings.TrimSpace(run.ID) == "" || (strings.TrimSpace(run.Verdict) == "" && (run.Status != "failed" || run.TargetKind != "local" || len(run.LocalResult) == 0)) {
 				return fmt.Errorf("daemon returned empty review result for %s", session)
 			}
 		}

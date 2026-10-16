@@ -5059,6 +5059,22 @@ export interface components {
             sessionId: string;
             truncated: boolean;
         };
+        LocalReviewFinding: {
+            /** @enum {string} */
+            kind: "required" | "suggestion";
+            line: number;
+            path: string;
+            reason: string;
+        };
+        LocalReviewResult: {
+            findings: components["schemas"]["LocalReviewFinding"][];
+            /** @enum {string} */
+            outcome: "approved" | "changes_requested" | "error";
+            round: number;
+            snapshotId: string;
+            summary: string;
+            version: number;
+        };
         MarkAllNotificationsReadRequest: {
             /** @description Acknowledge exactly these notifications. Omit to acknowledge every unread notification; paginating clients should send the ids they actually rendered so later pages stay unread. */
             ids?: string[];
@@ -5493,8 +5509,10 @@ export interface components {
             /** Format: date-time */
             invalidatedAt?: null | string;
             invalidationReason?: string;
+            localResult?: components["schemas"]["LocalReviewResult"];
             prUrl: string;
             reviewId: string;
+            round?: number;
             sessionId: string;
             snapshotId?: string;
             status: string;
@@ -6243,6 +6261,7 @@ export interface components {
             body?: string;
             /** @description Id of the GitHub PR review the reviewer posted, if any. */
             githubReviewId?: string;
+            localResult?: components["schemas"]["LocalReviewResult"];
             /** @description Batched review results recorded by one reviewer CLI command. */
             reviews?: components["schemas"]["SubmitReviewItem"][];
             /** @description Review run id being completed. */
@@ -6255,6 +6274,7 @@ export interface components {
             body?: string;
             /** @description Id of the GitHub PR review the reviewer posted, if any. */
             githubReviewId?: string;
+            localResult?: components["schemas"]["LocalReviewResult"];
             /** @description Review run id being completed. */
             runId: string;
             /** @description Review verdict: approved or changes_requested. */

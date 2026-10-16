@@ -100,11 +100,18 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if !harness.IsKnown() {
 		return TriggerResult{}, fmt.Errorf("%w: unknown reviewer %q", ErrInvalid, harness)
 	}
+	if harness != domain.ReviewerClaudeCode {
+		return TriggerResult{}, fmt.Errorf("%w: Local review requires Claude Code", ErrInvalid)
+	}
 	runs, err := e.store.ListReviewRunsBySession(ctx, worker.ID)
 	if err != nil {
 		return TriggerResult{}, err
 	}
+	round := 1
 	for _, run := range runs {
+		if run.TargetKind == domain.ReviewTargetLocal && run.Round >= round {
+			round = run.Round + 1
+		}
 		if run.TargetKind != domain.ReviewTargetLocal || run.InvalidatedAt != nil {
 			continue
 		}
@@ -188,7 +195,7 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if source == "" {
 		source = domain.ReviewTriggerManual
 	}
-	run := domain.ReviewRun{ID: e.newID(), ReviewID: row.ID, SessionID: worker.ID, BatchID: e.newID(), Harness: harness, TriggerSource: source, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, SnapshotPath: snapshot.Path, SnapshotObservation: snapshot.ObservationID, SnapshotEpoch: e.localEpoch, Status: domain.ReviewRunRunning, CreatedAt: now}
+	run := domain.ReviewRun{Round: round, ID: e.newID(), ReviewID: row.ID, SessionID: worker.ID, BatchID: e.newID(), Harness: harness, TriggerSource: source, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, SnapshotPath: snapshot.Path, SnapshotObservation: snapshot.ObservationID, SnapshotEpoch: e.localEpoch, Status: domain.ReviewRunRunning, CreatedAt: now}
 	if err := e.store.InsertReviewRun(ctx, run); err != nil {
 		return TriggerResult{}, err
 	}
@@ -220,7 +227,7 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if err = guard.Check(ctx); err != nil {
 		return fail(fmt.Errorf("%w: %w", ErrConflict, err))
 	}
-	spec := LaunchSpec{RunID: run.ID, BatchID: run.BatchID, ReviewSessionID: row.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, ProjectEnv: cfg.Env, Harness: harness, AgentConfig: config, WorkspacePath: snapshot.Path, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, InterfaceMode: mode}
+	spec := LaunchSpec{Round: round, Task: worker.Metadata.Prompt, LatestUserPrompt: worker.Metadata.LatestUserPrompt, RunID: run.ID, BatchID: run.BatchID, ReviewSessionID: row.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, ProjectEnv: cfg.Env, Harness: harness, AgentConfig: config, WorkspacePath: snapshot.Path, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, InterfaceMode: mode}
 	launch, err := e.launcher.Spawn(ctx, spec)
 	if err != nil {
 		return fail(fmt.Errorf("launch local reviewer: %w", err))
@@ -254,12 +261,30 @@ func (e *Engine) trackLocalRun(run domain.ReviewRun, guard *localsnapshot.Guard)
 	go func() {
 		defer e.localWG.Done()
 		defer func() { e.localMu.Lock(); delete(e.localGuards, run.ID); e.localMu.Unlock() }()
-		select {
-		case <-guard.Done():
-			if !guard.Changed() {
-				return
+		timer := time.NewTimer(max(0, e.localTimeout-e.clock().Sub(run.CreatedAt)))
+		defer timer.Stop()
+		timeout := timer.C
+		for {
+			select {
+			case <-guard.Done():
+				if !guard.Changed() {
+					return
+				}
+			case <-guard.Changes():
+			case <-timeout:
+				unlock := e.lockWorker(run.SessionID)
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err := e.expireLocalRunLocked(ctx, run)
+				cancel()
+				unlock()
+				timeout = nil
+				if err != nil {
+					timer.Reset(time.Second)
+					timeout = timer.C
+				}
+				continue
 			}
-		case <-guard.Changes():
+			break
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -303,6 +328,12 @@ func (e *Engine) validateLocalRunLocked(ctx context.Context, run domain.ReviewRu
 		return fmt.Errorf("%w: local review run is missing", ErrNotFound)
 	}
 	run = current
+	if run.Status == domain.ReviewRunRunning && e.clock().Sub(run.CreatedAt) >= e.localTimeout {
+		if err := e.expireLocalRunLocked(ctx, run); err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: local reviewer timed out", ErrConflict)
+	}
 	if run.InvalidatedAt != nil {
 		return fmt.Errorf("%w: local review is stale: %s", ErrConflict, run.InvalidationReason)
 	}
@@ -432,4 +463,21 @@ func (e *Engine) localRestoreRequired(ctx context.Context, worker domain.Session
 		}
 	}
 	return true, nil
+}
+
+// expireLocalRunLocked settles a missing response even when no UI polls the run.
+// Serialize with launches so a late timer cannot interrupt the next reviewer.
+func (e *Engine) expireLocalRunLocked(ctx context.Context, run domain.ReviewRun) error {
+	updated, err := e.store.UpdateReviewRunResult(ctx, run.ID, domain.ReviewRunFailed, domain.VerdictNone, "Local reviewer timed out without a valid result", "", false)
+	if err != nil || !updated {
+		return err
+	}
+	row, ok, err := e.store.GetReviewBySessionAndHarness(ctx, run.SessionID, run.Harness)
+	if err != nil || !ok {
+		return err
+	}
+	if row.ReviewerHandleID != "" {
+		return e.launcher.Cancel(ctx, row.ReviewerHandleID, run.Harness)
+	}
+	return nil
 }

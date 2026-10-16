@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -83,19 +84,21 @@ type KillReviewResponse struct {
 
 // SubmitReviewItem is one review result in a batched submit request.
 type SubmitReviewItem struct {
-	RunID          string `json:"runId" description:"Review run id being completed."`
-	Verdict        string `json:"verdict" description:"Review verdict: approved or changes_requested."`
-	Body           string `json:"body,omitempty" description:"Review body recorded by AO. Required for changes_requested."`
-	GithubReviewID string `json:"githubReviewId,omitempty" description:"Id of the GitHub PR review the reviewer posted, if any."`
+	LocalResult    *domain.LocalReviewResult `json:"localResult,omitempty"`
+	RunID          string                    `json:"runId" description:"Review run id being completed."`
+	Verdict        string                    `json:"verdict" description:"Review verdict: approved or changes_requested."`
+	Body           string                    `json:"body,omitempty" description:"Review body recorded by AO. Required for changes_requested."`
+	GithubReviewID string                    `json:"githubReviewId,omitempty" description:"Id of the GitHub PR review the reviewer posted, if any."`
 }
 
 // SubmitReviewInput is the body of POST /api/v1/sessions/{sessionId}/reviews/submit.
 type SubmitReviewInput struct {
-	RunID          string             `json:"runId,omitempty" description:"Review run id being completed."`
-	Verdict        string             `json:"verdict,omitempty" description:"Review verdict: approved or changes_requested."`
-	Body           string             `json:"body,omitempty" description:"Review body recorded by AO. Required for changes_requested."`
-	GithubReviewID string             `json:"githubReviewId,omitempty" description:"Id of the GitHub PR review the reviewer posted, if any."`
-	Reviews        []SubmitReviewItem `json:"reviews,omitempty" description:"Batched review results recorded by one reviewer CLI command."`
+	LocalResult    *domain.LocalReviewResult `json:"localResult,omitempty"`
+	RunID          string                    `json:"runId,omitempty" description:"Review run id being completed."`
+	Verdict        string                    `json:"verdict,omitempty" description:"Review verdict: approved or changes_requested."`
+	Body           string                    `json:"body,omitempty" description:"Review body recorded by AO. Required for changes_requested."`
+	GithubReviewID string                    `json:"githubReviewId,omitempty" description:"Id of the GitHub PR review the reviewer posted, if any."`
+	Reviews        []SubmitReviewItem        `json:"reviews,omitempty" description:"Batched review results recorded by one reviewer CLI command."`
 }
 
 // ReviewsController owns the session-scoped /reviews routes. A nil Svc returns 501.
@@ -395,14 +398,21 @@ func (c *ReviewsController) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in SubmitReviewInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&in); err != nil {
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "INVALID_BODY", "Invalid request body", nil)
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "INVALID_BODY", "Expected one JSON review result", nil)
 		return
 	}
 	reviews := make([]reviewsvc.SubmittedReview, 0, len(in.Reviews))
 	if len(in.Reviews) > 0 {
 		for _, item := range in.Reviews {
 			reviews = append(reviews, reviewsvc.SubmittedReview{
+				LocalResult:    item.LocalResult,
 				RunID:          item.RunID,
 				Verdict:        domain.ReviewVerdict(item.Verdict),
 				Body:           item.Body,
@@ -411,6 +421,7 @@ func (c *ReviewsController) submit(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		reviews = append(reviews, reviewsvc.SubmittedReview{
+			LocalResult:    in.LocalResult,
 			RunID:          in.RunID,
 			Verdict:        domain.ReviewVerdict(in.Verdict),
 			Body:           in.Body,

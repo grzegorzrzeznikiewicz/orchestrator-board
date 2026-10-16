@@ -10,8 +10,63 @@ import (
 	"time"
 
 	workeragent "github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/claudecode"
+	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
+
+func TestLocalReviewerCannotUseProviderOrWriteTools(t *testing.T) {
+	agent := &captureAgent{}
+	r := &Reviewer{agent: agent}
+	if _, err := r.ReviewCommand(context.Background(), ports.ReviewInvocation{TargetKind: domain.ReviewTargetLocal, ReviewerID: "local", WorkspacePath: "/snapshot"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range agent.got.AllowedTools {
+		if strings.Contains(tool, "gh ") || strings.Contains(tool, "git ") {
+			t.Errorf("local reviewer allowed provider/checkout command %q", tool)
+		}
+	}
+	for _, tool := range []string{"Edit", "Write", "NotebookEdit", "Bash(gh:*)", "Bash(git:*)"} {
+		if !contains(agent.got.DisallowedTools, tool) {
+			t.Errorf("local reviewer does not deny %s", tool)
+		}
+	}
+}
+
+func TestLocalReviewerIsolationFlagsPrecedePromptAndNativeIdentityIsPerRun(t *testing.T) {
+	binDir := t.TempDir()
+	binary := "claude"
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(binDir, binary), []byte("stub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	var previous string
+	for _, runID := range []string{"run-1", "run-2"} {
+		spec, err := New().ReviewCommand(context.Background(), ports.ReviewInvocation{TargetKind: domain.ReviewTargetLocal, ReviewerID: "review-worker", RunID: runID, WorkspacePath: "/snapshot", Prompt: "review task"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		boundary := len(spec.Argv)
+		for i, arg := range spec.Argv {
+			if arg == "--" {
+				boundary = i
+				break
+			}
+		}
+		flags := spec.Argv[:boundary]
+		for _, want := range [][]string{{"--setting-sources", ""}, {"--settings", filepath.Join("/snapshot", ".claude", "settings.local.json")}, {"--tools", "Read,Grep,Glob,Bash"}, {"--strict-mcp-config"}} {
+			if !containsSubsequence(flags, want) {
+				t.Errorf("isolation flag %v missing before prompt in %v", want, spec.Argv)
+			}
+		}
+		if previous == spec.AgentSessionID {
+			t.Error("different rounds reuse native conversation identity")
+		}
+		previous = spec.AgentSessionID
+	}
+}
 
 // captureAgent is a stub ports.Agent that records the LaunchConfig the reviewer
 // builds, so the test asserts the reviewer's tool policy without needing the

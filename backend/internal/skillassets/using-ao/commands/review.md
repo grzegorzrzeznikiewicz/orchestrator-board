@@ -1,6 +1,6 @@
 # ao review
 
-Manage AO's native code reviewer for a worker's PR.
+Manage AO's native code reviewer for a worker's PR or local snapshot.
 
 AO's reviewer is an isolated reviewer agent for implementation PRs owned by an
 AO worker. To review that worker's PR, use `ao review trigger`. Inside a worker,
@@ -17,6 +17,32 @@ to review the PR.
 AO's review is internal. An AO approval is not a GitHub approval: it does not
 satisfy required or independent-account reviews or branch protection, and it
 does not authorize merging.
+
+## Local review
+
+When the project uses Local review, `ao review trigger` starts an independent
+Claude reviewer over the captured local files, including nonignored new files.
+No PR URL or provider comment is required. The review task includes the worker's
+original task and latest user direction; acceptance criteria belong in that task.
+The reviewer reads the snapshot and submits a result without editing source code.
+
+Submit exactly one version 1 `localResult` using `--reviews -`. Copy the run id,
+snapshot id and round from the review task; do not add separate `verdict`, `body`
+or `githubReviewId` fields:
+
+```bash
+printf '%s' '{"reviews":[{"runId":"<run-id>","localResult":{"version":1,"snapshotId":"<snapshot-id>","round":1,"outcome":"approved","summary":"Implementation meets the acceptance criteria.","findings":[]}}]}' | ao review submit --session <worker-session-id> --reviews -
+```
+
+Outcomes are `approved`, `changes_requested` and `error`. Each finding requires
+`kind` (`required` or `suggestion`), repository-relative `path`, positive `line`
+and a specific `reason`. `changes_requested` requires a required finding;
+`approved` permits only suggestions. Use `error` when the review cannot finish.
+A failed result, malformed response, missing response or stale snapshot cannot
+approve changes. A missing result fails after 15 minutes. Start a new round after
+a failed review. The result and round remain in history after daemon restart;
+loss of file observation makes the historical snapshot stale. Reviewer approval
+never means the user has accepted the implementation.
 
 ## Syntax
 
@@ -55,7 +81,7 @@ ao review ls mer-3
 
 ### ao review submit
 
-Record a reviewer's result for a worker's PR.
+Record a reviewer's result for a worker's PR or local snapshot.
 
 **Syntax:**
 ```
@@ -69,9 +95,9 @@ ao review submit [worker-session-id] [flags]
 | `--body string` | Review body: a path to a Markdown file, or `-` to read from stdin | - |
 | `--review-id string` | Id of the GitHub PR review just posted (the `.id` from the `gh api` POST that created the review) | - |
 | `--reviews string` | JSON review results array or object: a path, or `-` to read from stdin | - |
-| `--run string` | Review run id | Required |
+| `--run string` | Review run id | Required without `--reviews` |
 | `--session string` | Worker session id (or pass it as the positional argument) | - |
-| `--verdict string` | Review verdict: `approved` or `changes_requested` | Required |
+| `--verdict string` | PR review verdict: `approved` or `changes_requested` | Required without `--reviews` |
 
 If the local daemon is restarting when a result is submitted, AO retains the
 parsed result in memory and retries the same idempotent request for up to 30

@@ -245,6 +245,7 @@ func (s *Store) InsertReviewRun(ctx context.Context, r domain.ReviewRun) error {
 		return errors.New("local review requires a snapshot and cannot target a PR commit")
 	}
 	err := s.qw.InsertReviewRun(ctx, gen.InsertReviewRunParams{
+		Round:               int64(r.Round),
 		TargetKind:          string(r.TargetKind),
 		SnapshotID:          r.SnapshotID,
 		SnapshotPath:        r.SnapshotPath,
@@ -496,12 +497,21 @@ func reviewFromListRecoverableChatReviewsRow(r gen.ListRecoverableChatReviewsRow
 }
 
 func reviewRunFromRow(r gen.ReviewRun) domain.ReviewRun {
+	var result *domain.LocalReviewResult
+	if r.LocalResultJson != "" {
+		var decoded domain.LocalReviewResult
+		if json.Unmarshal([]byte(r.LocalResultJson), &decoded) == nil {
+			result = &decoded
+		}
+	}
 	var deliveredAt *time.Time
 	if r.DeliveredAt.Valid {
 		t := r.DeliveredAt.Time
 		deliveredAt = &t
 	}
 	return domain.ReviewRun{
+		Round:               int(r.Round),
+		LocalResult:         result,
 		TargetKind:          domain.ReviewTargetKind(r.TargetKind),
 		SnapshotID:          r.SnapshotID,
 		SnapshotPath:        r.SnapshotPath,
@@ -632,4 +642,20 @@ func (s *Store) BeginLocalReviewEditing(ctx context.Context, id domain.SessionID
 // HasPendingLocalReviewWork includes queued native turns when checking for idle.
 func (s *Store) HasPendingLocalReviewWork(ctx context.Context, id domain.SessionID) (bool, error) {
 	return s.qr.HasPendingLocalReviewWork(ctx, id)
+}
+
+// UpdateLocalReviewResult atomically stores the structured protocol and outcome.
+func (s *Store) UpdateLocalReviewResult(ctx context.Context, id string, status domain.ReviewRunStatus, verdict domain.ReviewVerdict, body string, result *domain.LocalReviewResult) (bool, error) {
+	raw := ""
+	if result != nil {
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return false, err
+		}
+		raw = string(encoded)
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	n, err := s.qw.UpdateLocalReviewResult(ctx, gen.UpdateLocalReviewResultParams{ID: id, Status: status, Verdict: verdict, Body: body, LocalResultJson: raw})
+	return n > 0, err
 }

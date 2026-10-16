@@ -624,6 +624,8 @@ type ReviewRun struct {
 	SnapshotEpoch       string
 	InvalidatedAt       sql.NullTime
 	InvalidationReason  string
+	Round               int64
+	LocalResultJson     string
 }
 
 type Session struct {

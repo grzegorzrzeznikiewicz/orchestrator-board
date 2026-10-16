@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
@@ -215,5 +217,106 @@ func TestLocalReviewerRestoreRequiresFreshRun(t *testing.T) {
 	result, err := e.RestoreReviewer(ctx, worker.ID)
 	if err != nil || result.Restored || launcher.spawned {
 		t.Fatalf("local reviewer restored through PR path: %+v %v", result, err)
+	}
+}
+
+func TestLocalReviewTimeoutFailsWithoutAnotherRead(t *testing.T) {
+	e, s, _, worker := localEngine(t)
+	now := time.Now()
+	e.clock = func() time.Time { return now }
+	e.localTimeout = 80 * time.Millisecond
+	res, err := e.TriggerWithOptions(context.Background(), worker.ID, TriggerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		run, _, err := s.GetReviewRun(context.Background(), res.Run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.Status == domain.ReviewRunFailed {
+			if run.Verdict != domain.VerdictNone || !strings.Contains(run.Body, "timed out") {
+				t.Fatalf("timeout result=%+v", run)
+			}
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("review remained running after timeout")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+type retryTimeoutStore struct {
+	*sqlite.Store
+	fail atomic.Bool
+}
+
+func (s *retryTimeoutStore) UpdateReviewRunResult(ctx context.Context, id string, status domain.ReviewRunStatus, verdict domain.ReviewVerdict, body, githubID string, inject bool) (bool, error) {
+	if status == domain.ReviewRunFailed && s.fail.CompareAndSwap(true, false) {
+		return false, errors.New("temporary write failure")
+	}
+	return s.Store.UpdateReviewRunResult(ctx, id, status, verdict, body, githubID, inject)
+}
+
+func TestLocalReviewRetriesFailedTimeoutPersistence(t *testing.T) {
+	e, s, _, worker := localEngine(t)
+	retry := &retryTimeoutStore{Store: s}
+	retry.fail.Store(true)
+	e.store = retry
+	now := time.Now()
+	e.clock = func() time.Time { return now }
+	e.localTimeout = 80 * time.Millisecond
+	res, err := e.TriggerWithOptions(context.Background(), worker.ID, TriggerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(4 * time.Second)
+	for {
+		run, _, err := s.GetReviewRun(context.Background(), res.Run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.Status == domain.ReviewRunFailed {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("transient persistence error disabled timeout")
+		case <-time.After(15 * time.Millisecond):
+		}
+	}
+}
+
+func TestLocalReviewCarriesTaskAndMonotonicRound(t *testing.T) {
+	e, s, launcher, worker := localEngine(t)
+	now := time.Now()
+	e.clock = func() time.Time { return now }
+	worker.Metadata.Prompt = "Fix login. Acceptance criteria: reject invalid credentials."
+	worker.Metadata.LatestUserPrompt = "Also cover disabled users."
+	if err := s.UpdateSession(context.Background(), worker); err != nil {
+		t.Fatal(err)
+	}
+	first, err := e.TriggerWithOptions(context.Background(), worker.ID, TriggerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt, _ := reviewTexts(launcher.gotSpec)
+	for _, want := range []string{worker.Metadata.Prompt, worker.Metadata.LatestUserPrompt, `"round": 1`, `"findings"`, `"snapshotId"`} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing %q in %s", want, prompt)
+		}
+	}
+	if _, err = s.UpdateReviewRunResult(context.Background(), first.Run.ID, domain.ReviewRunFailed, domain.VerdictNone, "no response", "", false); err != nil {
+		t.Fatal(err)
+	}
+	second, err := e.TriggerWithOptions(context.Background(), worker.ID, TriggerOptions{Rerun: true})
+	if err != nil || first.Run.Round != 1 || second.Run.Round != 2 {
+		t.Fatalf("rounds: first=%d second=%d err=%v", first.Run.Round, second.Run.Round, err)
+	}
+	if len(second.Reviews) != 1 || second.Reviews[0].Status != ReviewStateRunning || second.Reviews[0].LatestRun == nil || second.Reviews[0].LatestRun.Round != 2 {
+		t.Fatalf("same-time rounds selected an older result: %+v", second.Reviews)
 	}
 }
