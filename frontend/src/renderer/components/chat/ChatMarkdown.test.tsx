@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aoBridge } from "../../lib/bridge";
@@ -52,6 +52,17 @@ function renderWithSessionLinkHandler(text: string, onSessionLinkOpen: (url: str
 }
 
 describe("ChatMarkdown", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+	});
+	afterEach(() => {
+		cleanup();
+		// A pointer entry followed by focus can leave a Radix hover timer after
+		// unmount. Drain it while jsdom still exists, before restoring real timers.
+		act(() => vi.runOnlyPendingTimers());
+		vi.useRealTimers();
+	});
+
 	it("renders headings as headings rather than literal hashes", () => {
 		render(<ChatMarkdown text={"## Findings\n\nTwo files changed."} />);
 		expect(screen.getByRole("heading", { name: "Findings" })).toBeInTheDocument();

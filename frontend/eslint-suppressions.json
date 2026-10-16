@@ -1,0 +1,385 @@
+{
+  "e2e/files-ask-in-chat.spec.ts": {
+    "no-empty-pattern": {
+      "count": 1
+    }
+  },
+  "e2e/performance/harness.tsx": {
+    "@typescript-eslint/triple-slash-reference": {
+      "count": 1
+    }
+  },
+  "src/main.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/main/browser-profile-import.ts": {
+    "no-useless-escape": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 3
+    }
+  },
+  "src/main/browser-profile-ipc.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/main/browser-profile-ipc.ts": {
+    "no-control-regex": {
+      "count": 2
+    }
+  },
+  "src/main/browser-view-host.test.ts": {
+    "prefer-const": {
+      "count": 4
+    }
+  },
+  "src/main/desktop-telemetry-controller.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/main/editor-handoff.ts": {
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "src/main/mac-differential-v2-protocol.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "src/main/mac-differential-v2-transfer.ts": {
+    "no-unsafe-finally": {
+      "count": 1
+    }
+  },
+  "src/main/provider-auth-flow.ts": {
+    "prefer-const": {
+      "count": 2
+    }
+  },
+  "src/main/stale-app-copies.ts": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/ArtifactFileView.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/BrowserPanel.tsx": {
+    "no-unsafe-finally": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/CenterPane.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 4
+    }
+  },
+  "src/renderer/components/CloneRepositoryDialog.tsx": {
+    "no-useless-assignment": {
+      "count": 4
+    }
+  },
+  "src/renderer/components/CloudProjectSettingsForm.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/CommandPalette.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 10
+    }
+  },
+  "src/renderer/components/CreateProjectFlow.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "src/renderer/components/FileContentPane.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/GitHubOnboardingNotice.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/HarnessUpdateNotice.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/HomePage.tsx": {
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/InstallDependencyDialog.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "src/renderer/components/NotificationCenter.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/ProjectSettingsEditor.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/ReadOnlyFileView.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/SessionFileExplorer.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/SessionInspector.tsx": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/SessionView.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 6
+    }
+  },
+  "src/renderer/components/Sidebar.tsx": {
+    "@typescript-eslint/no-unused-expressions": {
+      "count": 4
+    },
+    "no-empty": {
+      "count": 2
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/StandaloneArchiveView.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/TerminalPane.test.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/TerminalPane.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 5
+    },
+    "react-hooks/rules-of-hooks": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/TitlebarNav.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 3
+    }
+  },
+  "src/renderer/components/TrayRuntime.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/XtermTerminal.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/chat/ChatComposer.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "src/renderer/components/chat/ChatMarkdown.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/chat/ChatWorkspace.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 4
+    }
+  },
+  "src/renderer/components/chat/CloudSessionChatSurface.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/chat/IndependentSideChatDelivery.test.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/chat/IndependentSideChats.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "src/renderer/components/chat/RenderFrame.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/chat/SessionChatSurface.tsx": {
+    "no-useless-escape": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/cloud-workspace/CloudWorkspaceReviewPane.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/settings/AgentModelCombobox.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/settings/CodexAccountsSection.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/components/settings/KeyboardShortcutsContent.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/settings/KeyboardShortcutsSettingsDialog.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/settings/ModelTuningControls.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/components/settings/harness/LocalHarnessContent.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useAgentReadinessQuery.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useAgentSwitchProviderCatalogs.test.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 4
+    }
+  },
+  "src/renderer/hooks/useBrowserView.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/hooks/useConversationPromptSuggestion.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useEditorHandoff.ts": {
+    "preserve-caught-error": {
+      "count": 2
+    }
+  },
+  "src/renderer/hooks/useFileAnnotation.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useRememberProjectPermissions.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useRemoteHosts.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useResizable.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/hooks/useSessionBrowserLink.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useSessionInterfaceSwitch.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useSessionInterfaceTransition.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useTabScrollEdges.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/hooks/useTerminalSession.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "src/renderer/lib/cloud-telemetry.ts": {
+    "no-useless-assignment": {
+      "count": 1
+    }
+  },
+  "src/renderer/lib/cursor-color-scheme.ts": {
+    "no-control-regex": {
+      "count": 1
+    }
+  },
+  "src/renderer/lib/osc-color-report.ts": {
+    "no-control-regex": {
+      "count": 4
+    }
+  },
+  "src/renderer/routes/_shell.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "src/renderer/stores/sidebar-order-store.ts": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "src/shared/browser-profiles.ts": {
+    "no-control-regex": {
+      "count": 2
+    }
+  }
+}

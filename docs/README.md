@@ -10,6 +10,8 @@ Start with [architecture.md](architecture.md) for the current backend model and
 
 ## Reference docs
 
+Pull request validation and local CI commands are documented in [ci.md](ci.md).
+
 Gemini CLI setup, permission mapping, and current capability limits are documented
 in [gemini-cli.md](gemini-cli.md).
 

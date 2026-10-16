@@ -10,18 +10,8 @@ name: e2e-gate tests
 # test runner and need no dependency install.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - "scripts/ao-e2e-pod-gate.mjs"
-      - "scripts/ao-e2e-pod-gate.test.mjs"
-      - ".github/workflows/e2e-gate-tests.yml"
-      # The gate runner's verdict parser is a contract against what the pod
-      # harness emits (AO_VERDICT lines from boot-real.sh) and what the release
-      # conductor invokes. Re-run the contract tests when the harness moves so
-      # a producer change that breaks the contract cannot slip past.
-      - "test/e2e-pod/**"
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,10 +19,11 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - name: Run verdict-contract tests
         run: node --test scripts/ao-e2e-pod-gate.test.mjs

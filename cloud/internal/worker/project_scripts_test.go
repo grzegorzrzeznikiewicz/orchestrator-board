@@ -103,7 +103,9 @@ func TestSetupKeepsTheTailOfLongOutput(t *testing.T) {
 // it is invoked, and stays installed (doing nothing) when the project has no
 // Cleanup commands, so Cleanup added later can still run.
 func TestCleanupHookRunsCommandsOnce(t *testing.T) {
-	t.Parallel()
+	// Writing and immediately execing a script must not race with another
+	// test's fork: its child can inherit the writable descriptor until exec,
+	// causing a spurious ETXTBSY on Unix (https://go.dev/issue/22315).
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh is unavailable")
 	}
