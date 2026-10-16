@@ -65,19 +65,22 @@ type Launcher interface {
 
 // LaunchSpec is the engine's request to (re)launch a reviewer for one pass.
 type LaunchSpec struct {
-	TargetKind      domain.ReviewTargetKind
-	SnapshotID      string
-	RunID           string
-	BatchID         string
-	ReviewSessionID string
-	LaunchID        string
-	WorkerID        domain.SessionID
-	ProjectID       domain.ProjectID
-	ProjectEnv      map[string]string
-	Harness         domain.ReviewerHarness
-	AgentConfig     domain.AgentConfig
-	WorkspacePath   string
-	AgentSessionID  string
+	Round            int
+	Task             string
+	LatestUserPrompt string
+	TargetKind       domain.ReviewTargetKind
+	SnapshotID       string
+	RunID            string
+	BatchID          string
+	ReviewSessionID  string
+	LaunchID         string
+	WorkerID         domain.SessionID
+	ProjectID        domain.ProjectID
+	ProjectEnv       map[string]string
+	Harness          domain.ReviewerHarness
+	AgentConfig      domain.AgentConfig
+	WorkspacePath    string
+	AgentSessionID   string
 	// ProviderConversationID is the typed Chat driver's stable conversation id.
 	// Terminal reviewers continue to use AgentSessionID.
 	ProviderConversationID string
@@ -321,6 +324,7 @@ func reviewerHandleID(workerID domain.SessionID) string {
 func (l *agentLauncher) invocation(spec LaunchSpec) ports.ReviewInvocation {
 	prompt, systemPrompt := reviewTexts(spec)
 	return ports.ReviewInvocation{
+		TargetKind:      spec.TargetKind,
 		ReviewerID:      reviewerHandleID(spec.WorkerID),
 		RunID:           spec.RunID,
 		WorkerSessionID: spec.WorkerID,
@@ -673,6 +677,7 @@ func (l *agentLauncher) runtimeEnv(ctx context.Context, spec LaunchSpec, argv []
 	}
 	env[sessionmanager.EnvProjectID] = string(spec.ProjectID)
 	env[sessionmanager.EnvDataDir] = l.dataDir
+	env["AO_REVIEW_TARGET_KIND"] = string(spec.TargetKind)
 	if strings.TrimSpace(l.runFile) != "" {
 		env[EnvRunFile] = l.runFile
 	}

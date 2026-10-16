@@ -2296,6 +2296,35 @@ func TestHooks_ReviewerPermissionRequestAnswersInsteadOfBlocking(t *testing.T) {
 	}
 }
 
+func TestLocalReviewerPermissionHookDeniesProviderPublication(t *testing.T) {
+	for _, tc := range []struct{ command, want string }{
+		{`printf '%s' '{}' | gh api --method POST repos/acme/app/pulls/12/reviews --input - --jq '.id'`, "deny"},
+		{`printf '%s' '{}' | ao review submit --session worker-7 --reviews -`, "allow"},
+		{`printf '%s' '{}' | ao review submit --session worker-9 --reviews -`, "deny"},
+		{`git commit -am injected`, "deny"},
+	} {
+		payload, _ := json.Marshal(map[string]any{"tool_name": "Bash", "tool_input": map[string]string{"command": tc.command}})
+		got := reviewerPermissionDecision(payload, "worker-7", "local")
+		if got.HookSpecificOutput.Decision.Behavior != tc.want {
+			t.Errorf("%s: got %s want %s", tc.command, got.HookSpecificOutput.Decision.Behavior, tc.want)
+		}
+	}
+}
+
+func TestLocalReviewerPreToolUseDeniesWritesEvenWithPriorPermission(t *testing.T) {
+	for _, tc := range []struct{ tool, command, want string }{
+		{"Read", "", "allow"}, {"Grep", "", "allow"}, {"Glob", "", "allow"},
+		{"Bash", `printf '%s' '{}' | ao review submit --session worker-7 --reviews -`, "allow"},
+		{"Bash", "rm source.go", "deny"}, {"Bash", "npm test", "deny"}, {"Edit", "", "deny"}, {"Write", "", "deny"}, {"mcp__files__write", "", "deny"}, {"Agent", "", "deny"},
+	} {
+		payload, _ := json.Marshal(map[string]any{"tool_name": tc.tool, "tool_input": map[string]string{"command": tc.command}})
+		out := localReviewerToolDecision(payload, "worker-7")
+		if out.HookSpecificOutput.PermissionDecision != tc.want {
+			t.Errorf("%s %s: %s want %s", tc.tool, tc.command, out.HookSpecificOutput.PermissionDecision, tc.want)
+		}
+	}
+}
+
 func TestHooksSessionDeliveryPreservesCoordinationOrigin(t *testing.T) {
 	t.Setenv("AO_SESSION_ID", "ao-worker")
 	t.Setenv("AO_RUNTIME_LAUNCH_ID", "launch-1")

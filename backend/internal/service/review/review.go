@@ -731,6 +731,7 @@ func (s *Service) ApplyReviewActivitySignal(ctx context.Context, reviewSessionID
 
 // SubmittedReview is one review result supplied by the reviewer CLI.
 type SubmittedReview struct {
+	LocalResult    *domain.LocalReviewResult
 	RunID          string
 	Verdict        domain.ReviewVerdict
 	Body           string
@@ -766,6 +767,13 @@ func (s *Service) SubmitMany(ctx context.Context, workerID domain.SessionID, rev
 	}
 	if s.store == nil {
 		return nil, fmt.Errorf("review service store is not configured")
+	}
+	if len(reviews) > 1 {
+		for _, review := range reviews {
+			if review.LocalResult != nil {
+				return nil, fmt.Errorf("%w: local review requires exactly one result per submission", ErrInvalid)
+			}
+		}
 	}
 	runs := make([]domain.ReviewRun, 0, len(reviews))
 	var supersededRunIDs []string
@@ -804,12 +812,6 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 	if runID == "" {
 		return domain.ReviewRun{}, fmt.Errorf("%w: review run id is required", ErrInvalid)
 	}
-	if !verdict.Valid() {
-		return domain.ReviewRun{}, fmt.Errorf("%w: verdict must be %q or %q", ErrInvalid, domain.VerdictApproved, domain.VerdictChangesRequested)
-	}
-	if verdict == domain.VerdictChangesRequested && body == "" {
-		return domain.ReviewRun{}, fmt.Errorf("%w: a changes_requested review requires a body", ErrInvalid)
-	}
 	run, ok, err := s.store.GetReviewRun(ctx, runID)
 	if err != nil {
 		return domain.ReviewRun{}, err
@@ -821,16 +823,16 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 		return domain.ReviewRun{}, fmt.Errorf("%w: review run %q does not belong to worker %q", ErrInvalid, runID, workerID)
 	}
 	if run.TargetKind == domain.ReviewTargetLocal {
-		if githubReviewID != "" {
-			return domain.ReviewRun{}, fmt.Errorf("%w: a local result cannot reference a provider review", ErrInvalid)
-		}
-		if s.engine == nil {
-			return domain.ReviewRun{}, fmt.Errorf("%w: local snapshot cannot be verified", ErrConflict)
-		}
-		if err := s.engine.ValidateLocalRun(ctx, run); err != nil {
-			return domain.ReviewRun{}, err
-		}
-		run.Current = true
+		return s.submitLocal(ctx, run, review)
+	}
+	if review.LocalResult != nil {
+		return domain.ReviewRun{}, fmt.Errorf("%w: local result cannot complete a PR review", ErrInvalid)
+	}
+	if !verdict.Valid() {
+		return domain.ReviewRun{}, fmt.Errorf("%w: verdict must be %q or %q", ErrInvalid, domain.VerdictApproved, domain.VerdictChangesRequested)
+	}
+	if verdict == domain.VerdictChangesRequested && body == "" {
+		return domain.ReviewRun{}, fmt.Errorf("%w: a changes_requested review requires a body", ErrInvalid)
 	}
 
 	switch run.Status {
@@ -848,9 +850,7 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 			return domain.ReviewRun{}, err
 		}
 		if !updated {
-			if run.TargetKind == domain.ReviewTargetLocal {
-				return domain.ReviewRun{}, fmt.Errorf("%w: local review was invalidated before result storage", ErrConflict)
-			}
+
 			return domain.ReviewRun{}, fmt.Errorf("%w: review run %q is not running", errRunSuperseded, runID)
 		}
 		run.Status = domain.ReviewRunComplete
@@ -858,12 +858,7 @@ func (s *Service) submitOne(ctx context.Context, workerID domain.SessionID, revi
 		run.Body = body
 		run.GithubReviewID = githubReviewID
 		run.AutoInjectReview = autoInject
-		if run.TargetKind == domain.ReviewTargetLocal {
-			if err := s.engine.ValidateLocalRun(ctx, run); err != nil {
-				return domain.ReviewRun{}, err
-			}
-			run.Current = true
-		}
+
 		// Only on the real running -> complete transition. Re-submitting an
 		// already-complete run returns early below, so telemetry stays idempotent
 		// the same way the store does.

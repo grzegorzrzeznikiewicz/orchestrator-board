@@ -14823,6 +14823,53 @@ components:
       - entries
       - truncated
       type: object
+    LocalReviewFinding:
+      properties:
+        kind:
+          enum:
+          - required
+          - suggestion
+          type: string
+        line:
+          type: integer
+        path:
+          type: string
+        reason:
+          type: string
+      required:
+      - kind
+      - path
+      - line
+      - reason
+      type: object
+    LocalReviewResult:
+      properties:
+        findings:
+          items:
+            $ref: '#/components/schemas/LocalReviewFinding'
+          type: array
+        outcome:
+          enum:
+          - approved
+          - changes_requested
+          - error
+          type: string
+        round:
+          type: integer
+        snapshotId:
+          type: string
+        summary:
+          type: string
+        version:
+          type: integer
+      required:
+      - version
+      - snapshotId
+      - round
+      - outcome
+      - summary
+      - findings
+      type: object
     MarkAllNotificationsReadRequest:
       properties:
         ids:
@@ -15884,10 +15931,14 @@ components:
           - string
         invalidationReason:
           type: string
+        localResult:
+          $ref: '#/components/schemas/LocalReviewResult'
         prUrl:
           type: string
         reviewId:
           type: string
+        round:
+          type: integer
         sessionId:
           type: string
         snapshotId:
@@ -17803,6 +17854,8 @@ components:
         githubReviewId:
           description: Id of the GitHub PR review the reviewer posted, if any.
           type: string
+        localResult:
+          $ref: '#/components/schemas/LocalReviewResult'
         reviews:
           description: Batched review results recorded by one reviewer CLI command.
           items:
@@ -17823,6 +17876,8 @@ components:
         githubReviewId:
           description: Id of the GitHub PR review the reviewer posted, if any.
           type: string
+        localResult:
+          $ref: '#/components/schemas/LocalReviewResult'
         runId:
           description: Review run id being completed.
           type: string

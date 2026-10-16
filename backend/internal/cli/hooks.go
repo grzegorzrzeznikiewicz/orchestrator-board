@@ -516,7 +516,7 @@ const reviewerPermissionDenyMessage = "AO headless reviewer: no human can answer
 // reviewerPermissionDecision answers a Claude Code reviewer's PermissionRequest:
 // allow the exact submit shapes, deny everything else so the session degrades
 // into a denial the model can route around instead of an unanswered prompt.
-func reviewerPermissionDecision(payload []byte, workerSessionID string) claudePermissionHookOutput {
+func reviewerPermissionDecision(payload []byte, workerSessionID string, targetKind ...string) claudePermissionHookOutput {
 	var p struct {
 		ToolName  string `json:"tool_name"`
 		ToolInput struct {
@@ -540,8 +540,43 @@ func reviewerPermissionDecision(payload []byte, workerSessionID string) claudePe
 		// launcher always sets it); admit nothing rather than any worker.
 		return out
 	}
+	if len(targetKind) > 0 && targetKind[0] == "local" && m[reviewerSubmitCommandPattern.SubexpIndex("session")] == "" {
+		return out
+	}
 	out.HookSpecificOutput.Decision.Behavior = "allow"
 	out.HookSpecificOutput.Decision.Message = ""
+	return out
+}
+
+type localReviewerPreToolOutput struct {
+	HookSpecificOutput struct {
+		HookEventName            string `json:"hookEventName"`
+		PermissionDecision       string `json:"permissionDecision"`
+		PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+	} `json:"hookSpecificOutput"`
+}
+
+// PreToolUse runs even when an inherited permission would auto-allow a tool.
+// Local reviewers may read and submit exactly one shell literal to their worker.
+func localReviewerToolDecision(payload []byte, workerID string) localReviewerPreToolOutput {
+	var input struct {
+		ToolName string `json:"tool_name"`
+	}
+	var out localReviewerPreToolOutput
+	out.HookSpecificOutput.HookEventName = "PreToolUse"
+	out.HookSpecificOutput.PermissionDecision = "deny"
+	out.HookSpecificOutput.PermissionDecisionReason = "Local reviewer may only read the snapshot and submit the supplied AO result."
+	if err := json.Unmarshal(payload, &input); err != nil {
+		return out
+	}
+	allowed := input.ToolName == "Read" || input.ToolName == "Grep" || input.ToolName == "Glob"
+	if input.ToolName == "Bash" {
+		allowed = reviewerPermissionDecision(payload, workerID, "local").HookSpecificOutput.Decision.Behavior == "allow"
+	}
+	if allowed {
+		out.HookSpecificOutput.PermissionDecision = "allow"
+		out.HookSpecificOutput.PermissionDecisionReason = ""
+	}
 	return out
 }
 
@@ -804,9 +839,12 @@ func (c *commandContext) runReviewHook(ctx context.Context, agent, event, review
 			c.reportHookFailure(agent, event, reviewSessionID, fmt.Errorf("read stdin: %w", err))
 		}
 	}
+	if domain.AgentHarness(agent) == domain.HarnessClaudeCode && event == "pre-tool-use" && os.Getenv("AO_REVIEW_TARGET_KIND") == "local" {
+		return json.NewEncoder(c.deps.Out).Encode(localReviewerToolDecision(payload, strings.TrimSpace(os.Getenv("AO_REVIEW_WORKER_SESSION_ID"))))
+	}
 	if domain.AgentHarness(agent) == domain.HarnessClaudeCode && event == "permission-request" {
 		// Answered here, so the reviewer never parks in blocked (#4810).
-		out := reviewerPermissionDecision(payload, strings.TrimSpace(os.Getenv("AO_REVIEW_WORKER_SESSION_ID")))
+		out := reviewerPermissionDecision(payload, strings.TrimSpace(os.Getenv("AO_REVIEW_WORKER_SESSION_ID")), os.Getenv("AO_REVIEW_TARGET_KIND"))
 		if err := json.NewEncoder(c.deps.Out).Encode(out); err != nil {
 			c.reportHookFailure(agent, event, reviewSessionID, fmt.Errorf("write permission response: %w", err))
 		}

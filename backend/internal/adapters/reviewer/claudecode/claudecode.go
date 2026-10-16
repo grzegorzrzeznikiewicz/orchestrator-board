@@ -8,6 +8,8 @@ package claudecode
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,7 +89,12 @@ var reviewerDisallowedTools = []string{
 // through an AO-owned prompt file so only the short task-file reference is
 // terminal-visible.
 func (r *Reviewer) ReviewCommand(ctx context.Context, inv ports.ReviewInvocation) (ports.ReviewCommandSpec, error) {
-	agentSessionID := workeragent.SessionUUID(inv.ReviewerID)
+	allowed, denied := reviewerTools(inv.TargetKind)
+	identity := inv.ReviewerID
+	if inv.TargetKind == domain.ReviewTargetLocal {
+		identity += ":" + inv.RunID
+	}
+	agentSessionID := workeragent.SessionUUID(identity)
 	argv, err := r.agent.GetLaunchCommand(ctx, ports.LaunchConfig{
 		Config: inv.Config,
 		// Pin the same deterministic reviewer-native id we persist. Hooks can
@@ -103,11 +110,20 @@ func (r *Reviewer) ReviewCommand(ctx context.Context, inv ports.ReviewInvocation
 		// Set an explicit non-bypass mode instead of deferring to the user's
 		// Claude defaultMode, which may itself be bypassPermissions.
 		Permissions:     ports.PermissionModeAuto,
-		AllowedTools:    reviewerAllowedTools,
-		DisallowedTools: reviewerDisallowedTools,
+		AllowedTools:    allowed,
+		DisallowedTools: denied,
 	})
 	if err != nil {
 		return ports.ReviewCommandSpec{}, err
+	}
+	if inv.TargetKind == domain.ReviewTargetLocal {
+		// Do not inherit broader user permissions, plugins or provider MCP tools.
+		// PreLaunch installs AO's hooks into this independent snapshot root.
+		boundary := slices.Index(argv, "--")
+		if boundary < 0 {
+			boundary = len(argv)
+		}
+		argv = slices.Insert(argv, boundary, "--setting-sources", "", "--settings", filepath.Join(inv.WorkspacePath, ".claude", "settings.local.json"), "--tools", "Read,Grep,Glob,Bash", "--strict-mcp-config")
 	}
 	return ports.ReviewCommandSpec{Argv: argv, AgentSessionID: agentSessionID}, nil
 }
@@ -227,4 +243,11 @@ func (r *Reviewer) ReviewCancel(context.Context) (ports.ReviewCancelSpec, error)
 		Inputs:     []string{"\x1b", "\x1b"},
 		InputDelay: 150 * time.Millisecond,
 	}, nil
+}
+
+func reviewerTools(kind domain.ReviewTargetKind) (allowed, denied []string) {
+	if kind != domain.ReviewTargetLocal {
+		return reviewerAllowedTools, reviewerDisallowedTools
+	}
+	return []string{"Read", "Grep", "Glob", "Bash(printf:*)", "Bash(ao review submit:*)"}, append(append([]string{}, reviewerDisallowedTools...), "Bash(gh:*)", "Bash(git:*)")
 }

@@ -67,13 +67,15 @@ type ReviewerSurface struct {
 
 // ReviewRun is one review pass against a worker's PR.
 type ReviewRun struct {
-	TargetKind          ReviewTargetKind `json:"targetKind,omitempty" enum:"pr,local"`
-	SnapshotID          string           `json:"snapshotId,omitempty"`
-	SnapshotPath        string           `json:"-"`
-	SnapshotObservation string           `json:"-"`
-	SnapshotEpoch       string           `json:"-"`
-	InvalidatedAt       *time.Time       `json:"invalidatedAt,omitempty"`
-	InvalidationReason  string           `json:"invalidationReason,omitempty"`
+	Round               int                `json:"round,omitempty"`
+	LocalResult         *LocalReviewResult `json:"localResult,omitempty"`
+	TargetKind          ReviewTargetKind   `json:"targetKind,omitempty" enum:"pr,local"`
+	SnapshotID          string             `json:"snapshotId,omitempty"`
+	SnapshotPath        string             `json:"-"`
+	SnapshotObservation string             `json:"-"`
+	SnapshotEpoch       string             `json:"-"`
+	InvalidatedAt       *time.Time         `json:"invalidatedAt,omitempty"`
+	InvalidationReason  string             `json:"invalidationReason,omitempty"`
 	// Current is derived for local review at the service boundary, never stored.
 	Current   bool      `json:"current,omitempty"`
 	ID        string    `json:"id"`

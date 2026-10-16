@@ -35,9 +35,13 @@ func TestLocalReviewAndConfigurationSurviveReopen(t *testing.T) {
 	if err = s.UpsertReview(ctx, domain.Review{ID: "review-local", SessionID: worker.ID, ProjectID: worker.ProjectID, Harness: domain.ReviewerClaudeCode, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	run := domain.ReviewRun{ID: "local-run", ReviewID: "review-local", SessionID: worker.ID, Harness: domain.ReviewerClaudeCode, TargetKind: domain.ReviewTargetLocal, SnapshotID: "sha256-content", SnapshotPath: "/data/snapshot", SnapshotObservation: "stat-digest", SnapshotEpoch: "epoch-1", Status: domain.ReviewRunRunning, CreatedAt: now}
+	run := domain.ReviewRun{Round: 1, ID: "local-run", ReviewID: "review-local", SessionID: worker.ID, Harness: domain.ReviewerClaudeCode, TargetKind: domain.ReviewTargetLocal, SnapshotID: "sha256-content", SnapshotPath: "/data/snapshot", SnapshotObservation: "stat-digest", SnapshotEpoch: "epoch-1", Status: domain.ReviewRunRunning, CreatedAt: now}
 	if err = s.InsertReviewRun(ctx, run); err != nil {
 		t.Fatal(err)
+	}
+	result := &domain.LocalReviewResult{Version: 1, SnapshotID: run.SnapshotID, Round: 1, Outcome: "changes_requested", Summary: "Missing validation", Findings: []domain.LocalReviewFinding{{Kind: "required", Path: "new.go", Line: 2, Reason: "Invalid input reaches persistence"}, {Kind: "suggestion", Path: "new.go", Line: 3, Reason: "Consider a clearer name"}}}
+	if updated, err := s.UpdateLocalReviewResult(ctx, run.ID, domain.ReviewRunComplete, domain.VerdictChangesRequested, result.Markdown(), result); err != nil || !updated {
+		t.Fatalf("record result: %v %v", updated, err)
 	}
 	if err = s.InvalidateLocalReviewRun(ctx, run.ID, "file changed", now); err != nil {
 		t.Fatal(err)
@@ -57,6 +61,9 @@ func TestLocalReviewAndConfigurationSurviveReopen(t *testing.T) {
 	got, ok, err := s.GetReviewRun(ctx, run.ID)
 	if err != nil || !ok {
 		t.Fatalf("read run: %v %v", ok, err)
+	}
+	if got.Round != 1 || !reflect.DeepEqual(got.LocalResult, result) || got.Status != domain.ReviewRunComplete || got.Verdict != domain.VerdictChangesRequested || got.Body != result.Markdown() {
+		t.Fatalf("structured history lost on restart: %+v", got)
 	}
 	if got.TargetKind != domain.ReviewTargetLocal || got.PRURL != "" || got.TargetSHA != "" || got.SnapshotID != run.SnapshotID || got.SnapshotPath != run.SnapshotPath || got.SnapshotObservation != run.SnapshotObservation || got.SnapshotEpoch != run.SnapshotEpoch || got.InvalidatedAt == nil || got.InvalidationReason != "file changed" {
 		t.Fatalf("run=%+v", got)

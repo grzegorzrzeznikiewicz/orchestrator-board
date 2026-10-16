@@ -113,6 +113,7 @@ type Deps struct {
 
 // Engine is the core code-review engine.
 type Engine struct {
+	localTimeout time.Duration
 	localDataDir string
 	localEpoch   string
 	localMu      sync.Mutex
@@ -150,6 +151,7 @@ func New(d Deps) *Engine {
 		newID = uuid.NewString
 	}
 	return &Engine{
+		localTimeout: 15 * time.Minute,
 		localDataDir: d.DataDir,
 		localEpoch:   uuid.NewString(),
 		localGuards:  make(map[string]*localsnapshot.Guard),

@@ -155,6 +155,30 @@ func TestReviewSubmitBatchReadsReviewsFromStdin(t *testing.T) {
 	}
 }
 
+func TestReviewSubmitLocalErrorPreservesStructuredResult(t *testing.T) {
+	cfg := setReviewEnv(t)
+	srv, capture := reviewServer(t, http.StatusOK, `{"reviews":[{"id":"run-1","targetKind":"local","status":"failed","verdict":"","localResult":{"outcome":"error"}}]}`)
+	writeRunFileFor(t, cfg, srv)
+	deps := aliveDeps()
+	const result = `{"version":1,"snapshotId":"snapshot","round":3,"outcome":"error","summary":"Cannot assess criteria","findings":[]}`
+	deps.In = strings.NewReader(`{"reviews":[{"runId":"run-1","localResult":` + result + `}]}`)
+	out, errOut, err := executeCLI(t, deps, "review", "submit", "mer-1", "--reviews", "-")
+	if err != nil || !strings.Contains(out, "recorded 1 review(s)") {
+		t.Fatalf("receipt: %s %s %v", out, errOut, err)
+	}
+	var got struct {
+		Reviews []struct {
+			LocalResult json.RawMessage `json:"localResult"`
+		} `json:"reviews"`
+	}
+	if err := json.Unmarshal([]byte(capture.body), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Reviews) != 1 || string(got.Reviews[0].LocalResult) != result {
+		t.Fatalf("local protocol lost in CLI: %s", capture.body)
+	}
+}
+
 func TestReviewSubmitBatchRetriesAcrossDaemonRestart(t *testing.T) {
 	cfg := setReviewEnv(t)
 	srv, capture := reviewServer(t, http.StatusOK, `{"reviews":[{"id":"run-1","verdict":"changes_requested"}]}`)

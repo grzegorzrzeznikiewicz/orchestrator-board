@@ -3085,5 +3085,8 @@
 	"inspector.localReviewStale": "Outdated snapshot — run review again",
 	"inspector.localReviewSnapshot": "Snapshot",
 	"inspector.localReviewApproved": "Reviewer approved",
-	"inspector.localReviewRun": "Run local review"
+	"inspector.localReviewRun": "Run local review",
+	"inspector.localReviewRound": "第 {{round}} 轮",
+	"inspector.localReviewRequired": "必须修改",
+	"inspector.localReviewSuggestion": "建议"
 }
