@@ -219,10 +219,13 @@ describe("ProjectSettingsForm", () => {
 		renderSettings("proj-1");
 		await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Review mode" }), "local");
 		fireEvent.change(screen.getByRole("textbox", { name: "Test commands" }), { target: { value: "go test ./...\nnpm test" } });
+		expect(screen.getByRole("spinbutton", { name: "Maximum workflow rounds" })).toHaveValue(3);
+		fireEvent.change(screen.getByRole("spinbutton", { name: "Maximum workflow rounds" }), {target:{value:"5"}});
 		submitSettings();
 		await waitFor(() => expect(putMock).toHaveBeenCalled());
 		const saved = putMock.mock.calls.at(-1)![1].body.config;
 		expect(saved.reviewMode).toBe("local");
+		expect(saved.localWorkflowMaxRounds).toBe(5);
         expect(saved.autoReview).toBe(false);
         expect(saved.workersRequestReview).not.toBe(true);
 		expect(saved.worker.agent).toBe("codex");
@@ -232,6 +235,7 @@ describe("ProjectSettingsForm", () => {
 		mockProject({ ...project, config: saved });
 		renderSettings("proj-1");
 		expect(await screen.findByRole("combobox", { name: "Review mode" })).toHaveValue("local");
+		expect(screen.getByRole("spinbutton",{name:"Maximum workflow rounds"})).toHaveValue(5);
 		expect(screen.getByRole("textbox", { name: "Test commands" })).toHaveValue("go test ./...\nnpm test");
 	});
 	it("saves a changed project setting without a submit action", async () => {

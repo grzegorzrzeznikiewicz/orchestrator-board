@@ -146,6 +146,7 @@ function SettingsBody({ project, projectId, hostId, hostConnected, onSaved, sect
 	const initialValues: ProjectSettingsDraft = {
 		reviewMode: config.reviewMode ?? "pr",
 		testCommands: (config.testCommands ?? []).join("\n"),
+ localWorkflowMaxRounds:config.localWorkflowMaxRounds||3,
 		displayName: project.name,
 		defaultBranch: config.defaultBranch ?? DEFAULT_BRANCH_AUTO,
 		sessionPrefix: config.sessionPrefix ?? "",
@@ -211,6 +212,7 @@ function SettingsBody({ project, projectId, hostId, hostConnected, onSaved, sect
 			: {
 					...config,
 					reviewMode: values.reviewMode === "local" ? "local" : config.reviewMode ? "pr" : undefined,
+ localWorkflowMaxRounds:values.reviewMode ==="local"?values.localWorkflowMaxRounds:config.localWorkflowMaxRounds,
 					testCommands: values.testCommands ? values.testCommands.split("\n").map((command) => command.trim()).filter(Boolean) : undefined,
 					defaultBranch: values.defaultBranch.trim() === DEFAULT_BRANCH_AUTO ? undefined : values.defaultBranch || undefined,
 					sessionPrefix: values.sessionPrefix || undefined,

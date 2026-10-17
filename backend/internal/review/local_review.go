@@ -45,7 +45,7 @@ func (e *Engine) reviewProjectConfig(ctx context.Context, id domain.ProjectID) (
 }
 
 func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRecord, cfg domain.ProjectConfig, opts TriggerOptions) (TriggerResult, error) {
-	if opts.Source == domain.ReviewTriggerAuto {
+	if opts.Source == domain.ReviewTriggerAuto && opts.WorkflowOperationID == "" {
 		return TriggerResult{SkipReason: "local_workflow_requires_manual_trigger"}, nil
 	}
 	admission, ok := e.store.(ports.LocalReviewWorkspace)
@@ -57,6 +57,29 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 		return TriggerResult{}, err
 	}
 	defer releaseAdmission()
+	if check, ok := e.store.(interface {
+		CheckLocalWorkflowReviewAdmission(context.Context, domain.SessionID, string) error
+	}); ok {
+		if err := check.CheckLocalWorkflowReviewAdmission(ctx, worker.ID, opts.WorkflowOperationID); err != nil {
+			return TriggerResult{}, fmt.Errorf("%w: %w", ErrConflict, err)
+		}
+	}
+	if opts.WorkflowOperationID != "" {
+		if store, ok := e.store.(interface {
+			GetWorkflowReviewRun(context.Context, string) (domain.ReviewRun, bool, error)
+		}); ok {
+			run, found, err := store.GetWorkflowReviewRun(ctx, opts.WorkflowOperationID)
+			if err != nil {
+				return TriggerResult{}, err
+			}
+			if found {
+				return TriggerResult{Run: run, Created: false}, nil
+			}
+		} else {
+			return TriggerResult{}, fmt.Errorf("%w: workflow review persistence unavailable", ErrInvalid)
+		}
+	}
+
 	current, found, err := e.sessions.GetSession(ctx, worker.ID)
 	if err != nil {
 		return TriggerResult{}, err
@@ -65,6 +88,14 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 		return TriggerResult{}, ErrNotFound
 	}
 	worker = current
+	if opts.WorkflowRun != nil {
+		worker.Metadata.Prompt = opts.WorkflowRun.Task
+		worker.Metadata.LatestUserPrompt = opts.WorkflowRun.LatestUserPrompt
+	}
+	if opts.WorkflowRun != nil && domain.LocalWorkflowWorkerGeneration(worker) != opts.WorkflowRun.WorkerGeneration {
+		return TriggerResult{}, fmt.Errorf("%w: executor controller changed since the workflow was started", ErrConflict)
+	}
+
 	pending, err := admission.HasPendingLocalReviewWork(ctx, worker.ID)
 	if err != nil {
 		return TriggerResult{}, err
@@ -136,6 +167,9 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if err != nil {
 		return TriggerResult{}, fmt.Errorf("prepare local review: %w", err)
 	}
+	if opts.ExpectedSnapshotID != "" && manifest.ID != opts.ExpectedSnapshotID {
+		return TriggerResult{}, fmt.Errorf("%w: current contents differ from tested snapshot", ErrConflict)
+	}
 	guard, err := localsnapshot.Watch(worker.Metadata.WorkspacePath, manifest)
 	if err != nil {
 		return TriggerResult{}, fmt.Errorf("observe local review: %w", err)
@@ -195,7 +229,7 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if source == "" {
 		source = domain.ReviewTriggerManual
 	}
-	run := domain.ReviewRun{Round: round, ID: e.newID(), ReviewID: row.ID, SessionID: worker.ID, BatchID: e.newID(), Harness: harness, TriggerSource: source, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, SnapshotPath: snapshot.Path, SnapshotObservation: snapshot.ObservationID, SnapshotEpoch: e.localEpoch, Status: domain.ReviewRunRunning, CreatedAt: now}
+	run := domain.ReviewRun{WorkflowOperationID: opts.WorkflowOperationID, Round: round, ID: e.newID(), ReviewID: row.ID, SessionID: worker.ID, BatchID: e.newID(), Harness: harness, TriggerSource: source, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, SnapshotPath: snapshot.Path, SnapshotObservation: snapshot.ObservationID, SnapshotEpoch: e.localEpoch, Status: domain.ReviewRunRunning, CreatedAt: now}
 	if err := e.store.InsertReviewRun(ctx, run); err != nil {
 		return TriggerResult{}, err
 	}
@@ -228,6 +262,16 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 		return fail(fmt.Errorf("%w: %w", ErrConflict, err))
 	}
 	spec := LaunchSpec{Round: round, Task: worker.Metadata.Prompt, LatestUserPrompt: worker.Metadata.LatestUserPrompt, RunID: run.ID, BatchID: run.BatchID, ReviewSessionID: row.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, ProjectEnv: cfg.Env, Harness: harness, AgentConfig: config, WorkspacePath: snapshot.Path, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, InterfaceMode: mode}
+	if err := ctx.Err(); err != nil {
+		return fail(err)
+	}
+	if check, ok := e.store.(interface {
+		CheckLocalWorkflowReviewAdmission(context.Context, domain.SessionID, string) error
+	}); ok {
+		if err := check.CheckLocalWorkflowReviewAdmission(ctx, worker.ID, opts.WorkflowOperationID); err != nil {
+			return fail(fmt.Errorf("%w: %w", ErrConflict, err))
+		}
+	}
 	launch, err := e.launcher.Spawn(ctx, spec)
 	if err != nil {
 		return fail(fmt.Errorf("launch local reviewer: %w", err))

@@ -37,6 +37,7 @@ type APIDeps struct {
 	SessionSteps       controllers.SessionStepsReader
 	PRs                prsvc.ActionManager
 	Reviews            reviewsvc.Manager
+	LocalWorkflow      controllers.LocalWorkflowService
 	Notifications      controllers.NotificationService
 	Reports            controllers.ReportService
 	NotificationStream controllers.NotificationStream
@@ -126,6 +127,7 @@ type API struct {
 	usage         *controllers.UsageController
 	prs           *controllers.PRsController
 	reviews       *controllers.ReviewsController
+	localWorkflow *controllers.LocalWorkflowController
 	notifications *controllers.NotificationsController
 	reports       *controllers.ReportsController
 	push          *controllers.PushController
@@ -184,6 +186,7 @@ func newAPIWithLogger(cfg config.Config, deps APIDeps, log *slog.Logger) *API {
 		usage:         &controllers.UsageController{Svc: deps.UsageSummary, Log: loggerOrDefault(log), Memory: deps.SessionMemory, Steps: deps.SessionSteps, Pressure: memoryPressure(deps.SessionMemory)},
 		prs:           &controllers.PRsController{Svc: deps.PRs},
 		reviews:       &controllers.ReviewsController{Svc: deps.Reviews},
+		localWorkflow: &controllers.LocalWorkflowController{Svc: deps.LocalWorkflow},
 		notifications: &controllers.NotificationsController{Svc: deps.Notifications, Stream: deps.NotificationStream},
 		reports:       &controllers.ReportsController{Svc: deps.Reports},
 		push:          &controllers.PushController{Registry: deps.Push},
@@ -244,6 +247,7 @@ func (a *API) Register(root chi.Router) {
 			a.usage.Register(r)
 			a.prs.Register(r)
 			a.reviews.Register(r)
+			a.localWorkflow.Register(r)
 			a.notifications.Register(r)
 			a.reports.Register(r)
 			a.push.Register(r)

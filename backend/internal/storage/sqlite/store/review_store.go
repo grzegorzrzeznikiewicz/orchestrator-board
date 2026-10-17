@@ -245,6 +245,7 @@ func (s *Store) InsertReviewRun(ctx context.Context, r domain.ReviewRun) error {
 		return errors.New("local review requires a snapshot and cannot target a PR commit")
 	}
 	err := s.qw.InsertReviewRun(ctx, gen.InsertReviewRunParams{
+		WorkflowOperationID: r.WorkflowOperationID,
 		Round:               int64(r.Round),
 		TargetKind:          string(r.TargetKind),
 		SnapshotID:          r.SnapshotID,
@@ -510,7 +511,7 @@ func reviewRunFromRow(r gen.ReviewRun) domain.ReviewRun {
 		deliveredAt = &t
 	}
 	return domain.ReviewRun{
-		Round:               int(r.Round),
+		WorkflowOperationID: r.WorkflowOperationID, Round: int(r.Round),
 		LocalResult:         result,
 		TargetKind:          domain.ReviewTargetKind(r.TargetKind),
 		SnapshotID:          r.SnapshotID,
@@ -636,6 +637,9 @@ func (s *Store) AcquireLocalReviewWorkspace(ctx context.Context, id domain.Sessi
 func (s *Store) BeginLocalReviewEditing(ctx context.Context, id domain.SessionID) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	if err := checkLocalWorkflowWorkerAdmission(ctx, s.qw, id); err != nil {
+		return err
+	}
 	return s.qw.BeginLocalReviewEditing(ctx, id)
 }
 

@@ -12,8 +12,37 @@ import (
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/localsnapshot"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 )
+
+func TestWorkflowReviewBindsTestedSnapshotAndLaunchIdentity(t *testing.T) {
+	e, s, launcher, worker := localEngine(t)
+	ctx := context.Background()
+	manifest, err := localsnapshot.Capture(ctx, worker.Metadata.WorkspacePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.TriggerWithOptions(ctx, worker.ID, TriggerOptions{WorkflowOperationID: "wrong-op", ExpectedSnapshotID: "not-the-tested-snapshot"})
+	if err == nil || launcher.spawned {
+		t.Fatalf("reviewed untested content: %v", err)
+	}
+	first, err := e.TriggerWithOptions(ctx, worker.ID, TriggerOptions{WorkflowOperationID: "review-operation", ExpectedSnapshotID: manifest.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Run.WorkflowOperationID != "review-operation" {
+		t.Fatal("operation not correlated")
+	}
+	second, err := e.TriggerWithOptions(ctx, worker.ID, TriggerOptions{WorkflowOperationID: "review-operation", ExpectedSnapshotID: manifest.ID})
+	if err != nil || second.Created || second.Run.ID != first.Run.ID {
+		t.Fatalf("duplicate launch: %+v %v", second, err)
+	}
+	stored, found, err := s.GetWorkflowReviewRun(ctx, "review-operation")
+	if err != nil || !found || stored.ID != first.Run.ID {
+		t.Fatalf("durable launch binding: %+v %v %v", stored, found, err)
+	}
+}
 
 type preflightActionLauncher struct {
 	*fakeLauncher
@@ -318,5 +347,17 @@ func TestLocalReviewCarriesTaskAndMonotonicRound(t *testing.T) {
 	}
 	if len(second.Reviews) != 1 || second.Reviews[0].Status != ReviewStateRunning || second.Reviews[0].LatestRun == nil || second.Reviews[0].LatestRun.Round != 2 {
 		t.Fatalf("same-time rounds selected an older result: %+v", second.Reviews)
+	}
+}
+
+func TestWorkflowReviewerKeepsFrozenTaskAfterWorkerRefresh(t *testing.T) {
+	e, _, launcher, worker := localEngine(t)
+	frozen := domain.LocalWorkflowRun{Task: "Original approved task", LatestUserPrompt: "Frozen clarification", WorkerGeneration: domain.LocalWorkflowWorkerGeneration(worker)}
+	_, err := e.TriggerWithOptions(context.Background(), worker.ID, TriggerOptions{WorkflowOperationID: "frozen-task-op", WorkflowRun: &frozen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launcher.gotSpec.Task != frozen.Task || launcher.gotSpec.LatestUserPrompt != frozen.LatestUserPrompt {
+		t.Fatalf("frozen task lost after refresh: %+v", launcher.gotSpec)
 	}
 }

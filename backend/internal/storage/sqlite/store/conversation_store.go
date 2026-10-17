@@ -1176,6 +1176,15 @@ func (s *Store) appendUserMessage(
 ) (created bool, err error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	if reviewID == "" {
+		if err := checkLocalWorkflowWorkerAdmission(ctx, s.qw, session); err != nil {
+			return false, err
+		}
+		if err := checkLocalWorkflowFixGeneration(ctx, s.qw, session, msg.ClientMessageID, generation); err != nil {
+			return false, err
+		}
+
+	}
 	if generation == "" && reviewID == "" {
 		// A Send may have read "provisioning" just before Kill or Ready.
 		// Session writes share writeMu, so this check and the append are atomic.

@@ -396,6 +396,34 @@ type Cue struct {
 	UpdatedAt time.Time
 }
 
+type LocalWorkflow struct {
+	ID         string
+	SessionID  string
+	RequestID  string
+	Version    int64
+	Phase      string
+	ClosedAt   sql.NullTime
+	RecordJson string
+}
+
+type LocalWorkflowOperation struct {
+	ID              string
+	WorkflowID      string
+	Cycle           int64
+	Kind            string
+	Attempt         int64
+	State           string
+	ClientMessageID string
+	RecordJson      string
+}
+
+type LocalWorkflowTest struct {
+	ID           string
+	OperationID  string
+	CommandIndex int64
+	RecordJson   string
+}
+
 type ModelUsageEvent struct {
 	ID                    int64
 	BindingID             int64
@@ -626,6 +654,7 @@ type ReviewRun struct {
 	InvalidationReason  string
 	Round               int64
 	LocalResultJson     string
+	WorkflowOperationID string
 }
 
 type Session struct {

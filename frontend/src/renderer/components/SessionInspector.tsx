@@ -1,5 +1,8 @@
+import { getLocalWorkflow } from "../lib/local-workflow-api";
+import { localWorkflowQueryKey } from "../hooks/use-local-workflow";
 import { FileText, MessageSquare } from "lucide-react";
 import { AppLink } from "./AppLink";
+import { LocalWorkflowPanel } from "./LocalWorkflowPanel";
 import { LocalReviewHistory } from "./LocalReviewHistory";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -1326,6 +1329,13 @@ function LocalReviewsSection({
 			return projectConfig(data?.project);
 		},
 	});
+ const workflowQuery = useQuery({
+  queryKey:localWorkflowQueryKey(session.id,hostId),
+  enabled:projectConfigQuery.data?.reviewMode==="local",
+  queryFn:()=>getLocalWorkflow(session.id,hostId),
+ });
+ const workflow=workflowQuery.data;
+ const workflowOwnsReview=Boolean(workflow?.run&&(["waiting_executor","testing","reviewing","fixing","stopping"].includes(workflow.run.phase)||workflow.operations?.some(op=>(op.kind==="tests"||op.kind==="review")&&["reserved","running","uncertain"].includes(op.state))));
 	// The reviewer preference belongs to the worker session, not this component
 	// or the whole project. Keep local state responsive while the daemon persists
 	// it, and resync when the inspector moves to another session.
@@ -1480,6 +1490,7 @@ function LocalReviewsSection({
 	);
 	return (
 		<>
+			{projectConfigQuery.data?.reviewMode==="local" && <LocalWorkflowPanel sessionId={session.id} hostId={hostId} />}
 			{/* Running a review is an action; reading them is a list. The action stays
 			    on top, then one list carrying both sources keyed by PR. */}
 			<ReviewPanel
@@ -1498,7 +1509,8 @@ function LocalReviewsSection({
 				isAutoReviewSaving={saveAutoReview.isPending}
 				isKilling={killReview.isPending}
 				isSwitchingReviewer={saveReviewer.isPending}
-				isTriggering={triggerReview.isPending}
+				workflowActive={workflowOwnsReview}
+ isTriggering={triggerReview.isPending}
 				hostId={hostId}
 				onCancel={() => cancelReview.mutate()}
 				onAutoReviewChange={(enabled) => saveAutoReview.mutate(enabled)}
@@ -2267,6 +2279,7 @@ function mockProjectConfig(): ProjectConfig {
 }
 
 function ReviewPanel({
+ workflowActive=false,
 	cloud = false,
 	notice,
 	cloudReviewerHarnesses = [],
@@ -2316,6 +2329,7 @@ function ReviewPanel({
 	onOpenReviewer: (surface: ReviewerSurface) => void;
 	isLoading: boolean;
 	isTriggering: boolean;
+ workflowActive?:boolean;
 	isCancelling: boolean;
 	isKilling: boolean;
 	isSwitchingReviewer: boolean;
@@ -2393,7 +2407,7 @@ function ReviewPanel({
 	const reviewLive = reviewHasLiveActivity(openReviewStates, reviewerActivityState, hasReviewerSession);
 	const reviewHasRun = reviewRunning || Boolean(latest);
 	const runAction = localReview && !reviewRunning ? t("inspector.localReviewRun") : reviewSessionRunAction(openReviewStates, isTriggering);
-	const runDisabled = isKilling || isSwitchingReviewer || (cloud && !cloudReviewerReady) || reviewRunDisabled(openReviewStates, isTriggering);
+	const runDisabled = workflowActive || isKilling || isSwitchingReviewer || (cloud && !cloudReviewerReady) || reviewRunDisabled(openReviewStates, isTriggering);
 	const primaryReviewActionLabel = reviewRunning
 		? isCancelling
 			? t("inspector.review.cancelling")

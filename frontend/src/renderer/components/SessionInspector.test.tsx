@@ -4286,6 +4286,20 @@ describe("SessionInspector summary reviews", () => {
     expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/trigger")[0][1].body.prUrl).toBeUndefined();
   });
 
+  it("disables manual Local review while workflow verification owns the session", async () => {
+    const local = { ...reviewState(0, "needs_review", ""), targetKind: "local", prUrl: "", title: "Local review", snapshotId: "content-id" };
+    const base = commonGetsResponder([], "", [local]);
+    getMock.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/projects/{id}") return {data:{project:{id:"ws-1",kind:"single_repo",config:{reviewMode:"local",worker:{agent:"codex"},reviewers:[{harness:"claude-code"}]}}}};
+      if (path === "/api/v1/sessions/{sessionId}/local-workflow") return {data:{run:{id:"wf",phase:"testing",version:2,cycle:1,maxRounds:3},operations:[],tests:[],requiredFindings:[],current:false}};
+      return base(path);
+    });
+    renderWithQuery(<SessionInspector session={session([])} />);
+    await userEvent.click(await screen.findByRole("tab",{name:"Reviews"}));
+    expect(await screen.findByRole("button",{name:"Stop workflow"})).toBeVisible();
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Run local review"})).toBeDisabled());
+  });
+
   it("hides Reviews and the review preference when the session has no PR", async () => {
     mockCommonGets();
     renderWithQuery(<SessionInspector session={session([], { outputType: "pr" })} />);
