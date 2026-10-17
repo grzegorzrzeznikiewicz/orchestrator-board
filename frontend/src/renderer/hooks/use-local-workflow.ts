@@ -12,44 +12,104 @@ import {
   resumeLocalWorkflow,
   type LocalWorkflowSnapshot,
 } from "../lib/local-workflow-api";
+import { aoBridge } from "../lib/bridge";
 
 export const localWorkflowQueryKey = (sessionId: string, hostId?: string) =>
   hostId
     ? (["remote-local-workflow", hostId, sessionId] as const)
     : (["local-workflow", sessionId] as const);
+type DecisionAction = {
+  kind: "accept" | "request_changes";
+  version: number;
+  workflowId: string;
+  snapshotId: string;
+  testOperationId: string;
+  reviewRunId: string;
+  comment: string;
+};
 type Action =
   | { kind: "start" }
   | { kind: "stop"; version: number }
-  | { kind: "resume"; version: number; maxRounds?: number };
+  | { kind: "resume"; version: number; maxRounds?: number }
+  | DecisionAction;
+type OwnedAction = {
+  sessionId: string;
+  hostId?: string;
+  input: Action;
+  requestKey: string;
+  requestId: string;
+};
+
 export function useLocalWorkflow(sessionId: string, hostId?: string) {
   const client = useQueryClient();
-  const key = localWorkflowQueryKey(sessionId, hostId);
-  const requestId = useRef<string | null>(null);
+  const requests = useRef(new Map<string, string>());
   const query = useQuery(localWorkflowQueryOptions(sessionId, hostId));
-  const action = useMutation({
-    mutationFn: (input: Action) => {
-      if (input.kind === "start") {
-        requestId.current ??= crypto.randomUUID();
-        return startLocalWorkflow(sessionId, requestId.current, hostId);
-      }
+  const mutation = useMutation({
+    mutationFn: async (
+      owned: OwnedAction,
+    ): Promise<LocalWorkflowSnapshot | undefined> => {
+      const { sessionId, hostId, input, requestId } = owned;
+      if (input.kind === "start")
+        return startLocalWorkflow(sessionId, requestId, hostId);
       if (input.kind === "stop")
         return stopLocalWorkflow(sessionId, input.version, hostId);
-      return resumeLocalWorkflow(
+      if (input.kind === "resume")
+        return resumeLocalWorkflow(
+          sessionId,
+          input.version,
+          input.maxRounds,
+          hostId,
+        );
+      if (hostId || !aoBridge.localWorkflow.available)
+        throw new Error("Use the desktop app on this host to make a decision.");
+      await aoBridge.localWorkflow.decide({
         sessionId,
-        input.version,
-        input.maxRounds,
-        hostId,
-      );
+        requestId,
+        workflowId: input.workflowId,
+        expectedVersion: input.version,
+        kind: input.kind === "accept" ? "accepted" : "changes_requested",
+        comment: input.comment,
+        snapshotId: input.snapshotId,
+        testOperationId: input.testOperationId,
+        reviewRunId: input.reviewRunId,
+      });
+      // The query is authoritative even when the native dialog was cancelled.
+      return undefined;
     },
-    onSuccess: (data, input) => {
-      client.setQueryData(key, data);
-      if (input.kind === "start") requestId.current = null;
+    onSuccess: (data, owned) => {
+      if (data)
+        client.setQueryData(
+          localWorkflowQueryKey(owned.sessionId, owned.hostId),
+          data,
+        );
+      requests.current.delete(owned.requestKey);
     },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: key });
+    onSettled: (_data, _error, owned) => {
+      void client.invalidateQueries({
+        queryKey: localWorkflowQueryKey(owned.sessionId, owned.hostId),
+      });
     },
   });
-  return { query, action };
+  const owned =
+    mutation.variables?.sessionId === sessionId &&
+    mutation.variables.hostId === hostId;
+  return {
+    query,
+    action: {
+      ...mutation,
+      error: owned ? mutation.error : null,
+      isPending: owned && mutation.isPending,
+      mutate: (input: Action) => {
+        const requestKey = JSON.stringify([sessionId, hostId ?? null, input]);
+        let requestId = requests.current.get(requestKey);
+        if (!requestId) {
+          requestId = crypto.randomUUID();
+          requests.current.set(requestKey, requestId);
+        }
+        mutation.mutate({ sessionId, hostId, input, requestId, requestKey });
+      },
+    },
+  };
 }
 
 export function localWorkflowQueryOptions(

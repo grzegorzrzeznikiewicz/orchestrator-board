@@ -56,6 +56,15 @@ func (w *workflowModel) DeliverFix(ctx context.Context, id domain.SessionID, ope
 }
 func (w *workflowModel) Interrupt(context.Context, domain.SessionID, string) error { return nil }
 
+type workflowDesktopConfirmer struct{ allow bool }
+
+func (c *workflowDesktopConfirmer) Confirm(context.Context, localworkflow.DecisionChallenge) error {
+	if !c.allow {
+		return localworkflow.ErrDecisionDenied
+	}
+	return nil
+}
+
 func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX command fixture; Windows runner is build checked")
@@ -86,7 +95,8 @@ func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T)
 	defer engine.CloseLocalReviews()
 	reviews := reviewsvc.New(engine, store)
 	model := &workflowModel{root: root}
-	coordinator := localworkflow.New(localworkflow.Deps{Store: store, Worker: model, Tests: localworkflow.NewTestRunner(dataDir), Reviews: reviews, DataDir: dataDir})
+	desktop := &workflowDesktopConfirmer{}
+	coordinator := localworkflow.New(localworkflow.Deps{Decisions: desktop, Store: store, Worker: model, Tests: localworkflow.NewTestRunner(dataDir), Reviews: reviews, DataDir: dataDir})
 	defer func() { _ = coordinator.Close(ctx) }()
 	router := httpd.NewRouterWithControl(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, httpd.APIDeps{Reviews: reviews, LocalWorkflow: coordinator}, httpd.ControlDeps{})
 	srv := httptest.NewServer(router)
@@ -164,6 +174,35 @@ func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T)
 	if e = exec.Command("git", "-C", root, "rev-parse", "--verify", "HEAD").Run(); e == nil {
 		t.Fatal("workflow created a commit")
 	}
+	var testID, reviewID, snapshotID string
+	for _, op := range final.Operations {
+		if op.Cycle == final.Run.Cycle {
+			if op.Kind == "tests" {
+				testID = op.ID
+				snapshotID = op.SnapshotID
+			}
+			if op.Kind == "review" {
+				reviewID = op.ReviewRunID
+			}
+		}
+	}
+	decisionBody, e := json.Marshal(map[string]any{"requestId": "integration-decision", "intentId": "private-desktop-intent", "workflowId": final.Run.ID, "expectedVersion": final.Run.Version, "kind": "accepted", "comment": "Manually checked", "snapshotId": snapshotID, "testOperationId": testID, "reviewRunId": reviewID})
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, status, _ = doRequest(t, srv, http.MethodPost, path+"/local-workflow/decision", string(decisionBody))
+	if status != 403 {
+		t.Fatalf("unconfirmed decision status=%d", status)
+	}
+	desktop.allow = true
+	raw, status, _ = doRequest(t, srv, http.MethodPost, path+"/local-workflow/decision", string(decisionBody))
+	if status != 200 {
+		t.Fatalf("confirmed decision %d: %s", status, raw)
+	}
+	var accepted localworkflow.Snapshot
+	if e = json.Unmarshal(raw, &accepted); e != nil || !accepted.Accepted || accepted.Stage != "accepted" || len(accepted.Decisions) != 1 {
+		t.Fatalf("human decision lost: %+v %v", accepted, e)
+	}
 	// Reopen storage and services as a new daemon would. Reviewer evidence must
 	// come from SQLite, and a lost live guard must not imply readiness.
 	if e = coordinator.Close(ctx); e != nil {
@@ -191,6 +230,9 @@ func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T)
 	}
 	if restored.Current || restored.Stage != "local_review" || len(restored.Reviews) != 2 || len(restored.Tests) != 2 || restored.Reviews[0].ID != final.Reviews[0].ID || restored.Reviews[1].ID != final.Reviews[1].ID || restored.Reviews[0].LocalResult.Outcome != "changes_requested" || restored.Reviews[1].LocalResult.Outcome != "approved" {
 		t.Fatalf("lost persisted round history after restart: %+v", restored)
+	}
+	if restored.Accepted || len(restored.Decisions) != 1 || restored.Decisions[0].Comment != "Manually checked" || restored.Decisions[0].ID != accepted.Decisions[0].ID {
+		t.Fatalf("lost decision history or revived acceptance: %+v", restored)
 	}
 
 }

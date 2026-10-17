@@ -839,7 +839,7 @@ func Run() error {
 		}
 		return fmt.Errorf("reconcile sessions on boot: %w", reconcileErr)
 	}
-	localWorkflowSvc, workflowErr := startLocalWorkflow(ctx, store, sessMgr, chatSvc, reviewSvc, cfg.DataDir, log)
+	localWorkflowSvc, workflowErr := startLocalWorkflow(ctx, store, sessMgr, chatSvc, reviewSvc, newLocalWorkflowDecisionConfirmer(browserBroker), cfg.DataDir, log)
 	if workflowErr != nil {
 		stop()
 		lcStack.Stop()

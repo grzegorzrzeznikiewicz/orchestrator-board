@@ -22,6 +22,7 @@ type scenarioWorker struct {
 	mu         sync.Mutex
 	root       string
 	fixes      int
+	prompts    []string
 	generation string
 	stopped    bool
 }
@@ -42,6 +43,7 @@ func (w *scenarioWorker) DeliverFix(_ context.Context, _ domain.SessionID, id, t
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.fixes++
+	w.prompts = append(w.prompts, text)
 	if e := os.WriteFile(filepath.Join(w.root, "value"), []byte("correct"), 0600); e != nil {
 		return WorkerObservation{}, e
 	}

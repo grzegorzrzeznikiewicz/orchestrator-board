@@ -11,7 +11,22 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalWorkflowPanel } from "./LocalWorkflowPanel";
 
-const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const { get, post, decide, desktop } = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  decide: vi.fn(),
+  desktop: { available: true },
+}));
+vi.mock("../lib/bridge", () => ({
+  aoBridge: {
+    localWorkflow: {
+      get available() {
+        return desktop.available;
+      },
+      decide,
+    },
+  },
+}));
 vi.mock("../lib/host-clients", () => ({
   clientForSessionHost: () => ({ GET: get, POST: post }),
 }));
@@ -63,6 +78,8 @@ afterEach(cleanup);
 beforeEach(() => {
   get.mockReset().mockResolvedValue({ data: snapshot });
   post.mockReset().mockResolvedValue({ data: snapshot });
+  decide.mockReset().mockResolvedValue({ status: "recorded" });
+  desktop.available = true;
 });
 describe("LocalWorkflowPanel", () => {
   it("shows required findings and requires an explicit greater limit to resume", async () => {
@@ -291,4 +308,195 @@ it("does not show a late log response in another session", async () => {
     }),
   );
   expect(screen.queryByText("Private previous session output")).toBeNull();
+});
+
+const readyForDecision = () => ({
+  ...snapshot,
+  run: { ...run, phase: "ready", blockCode: "", blockMessage: "", cycle: 1 },
+  current: true,
+  accepted: false,
+  requiredFindings: [],
+  decisions: [],
+  reviews: [],
+  operations: [
+    {
+      id: "tests",
+      kind: "tests",
+      cycle: 1,
+      state: "succeeded",
+      snapshotId: "snapshot",
+      attempt: 1,
+    },
+    {
+      id: "review-op",
+      kind: "review",
+      cycle: 1,
+      state: "succeeded",
+      snapshotId: "snapshot",
+      inputOperationId: "tests",
+      reviewRunId: "review",
+      attempt: 1,
+    },
+  ],
+});
+
+describe("desktop user decision controls", () => {
+  it("requires a comment for corrections and sends exact evidence through preload", async () => {
+    get.mockResolvedValue({ data: readyForDecision() });
+    show();
+    const accept = await screen.findByRole("button", {
+      name: "Accept changes",
+    });
+    const reject = screen.getByRole("button", { name: "Request changes" });
+    expect(reject).toBeDisabled();
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Decision comment" }),
+      { target: { value: "Also cover empty input" } },
+    );
+    expect(reject).toBeEnabled();
+    fireEvent.click(reject);
+    await waitFor(() =>
+      expect(decide).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "worker",
+          workflowId: "wf",
+          expectedVersion: 4,
+          kind: "changes_requested",
+          comment: "Also cover empty input",
+          snapshotId: "snapshot",
+          testOperationId: "tests",
+          reviewRunId: "review",
+        }),
+      ),
+    );
+    expect(post).not.toHaveBeenCalled();
+    expect(accept).toBeEnabled();
+  });
+  it("preserves request identity on uncertain retry and replaces it after a changed comment", async () => {
+    get.mockResolvedValue({ data: readyForDecision() });
+    decide.mockRejectedValue(new Error("Connection lost"));
+    show();
+    const button = await screen.findByRole("button", {
+      name: "Accept changes",
+    });
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Connection lost",
+    );
+    fireEvent.click(button);
+    await waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+    expect(decide.mock.calls[0][0].requestId).toBe(
+      decide.mock.calls[1][0].requestId,
+    );
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Decision comment" }),
+      { target: { value: "New decision input" } },
+    );
+    fireEvent.click(button);
+    await waitFor(() => expect(decide).toHaveBeenCalledTimes(3));
+    expect(decide.mock.calls[2][0].requestId).not.toBe(
+      decide.mock.calls[0][0].requestId,
+    );
+  });
+  it("does not show a native cancellation as acceptance or an error", async () => {
+    get.mockResolvedValue({ data: readyForDecision() });
+    decide.mockResolvedValue({ status: "cancelled" });
+    show();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Accept changes" }),
+    );
+    await waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Accepted by you")).toBeNull();
+  });
+  it("disables desktop decisions for browser preview and stale evidence", async () => {
+    desktop.available = false;
+    get.mockResolvedValue({ data: readyForDecision() });
+    show();
+    expect(
+      await screen.findByRole("button", { name: "Accept changes" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Use the desktop app on this host to make a decision."),
+    ).toBeVisible();
+    expect(decide).not.toHaveBeenCalled();
+  });
+  it("does not carry a pending decision response or comment into another session", async () => {
+    get.mockImplementation(
+      (_url: string, opts: { params: { path: { sessionId: string } } }) =>
+        Promise.resolve({
+          data: {
+            ...readyForDecision(),
+            run: {
+              ...readyForDecision().run,
+              sessionId: opts.params.path.sessionId,
+            },
+          },
+        }),
+    );
+    let finish: (value: { status: string }) => void = () => {};
+    decide.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const panel = (sessionId: string, hostId?: string) => (
+      <QueryClientProvider client={client}>
+        <LocalWorkflowPanel sessionId={sessionId} hostId={hostId} />
+      </QueryClientProvider>
+    );
+    const view = render(panel("worker"));
+    const comment = await screen.findByRole("textbox", {
+      name: "Decision comment",
+    });
+    fireEvent.change(comment, { target: { value: "Old session feedback" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept changes" }));
+    await waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+    view.rerender(panel("other"));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "Decision comment" }),
+      ).toHaveValue(""),
+    );
+    await act(async () => finish({ status: "recorded" }));
+    expect(screen.queryByText("Accepted by you")).toBeNull();
+    view.rerender(panel("other", "remote"));
+    expect(
+      await screen.findByRole("button", { name: "Accept changes" }),
+    ).toBeDisabled();
+  });
+  it("keeps a stale acceptance in history without claiming current acceptance", async () => {
+    get.mockResolvedValue({
+      data: {
+        ...readyForDecision(),
+        current: false,
+        accepted: false,
+        decisions: [
+          {
+            id: "decision",
+            workflowId: "wf",
+            kind: "accepted",
+            comment: "Reviewed before editing",
+            cycle: 1,
+            snapshotId: "old-snapshot",
+            createdAt: "2026-10-17T12:00:00Z",
+          },
+        ],
+      },
+    });
+    show();
+    expect(await screen.findByText("Historical acceptance")).toBeVisible();
+    expect(screen.getByText("Reviewed before editing")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Accept changes" }),
+    ).toBeDisabled();
+  });
 });

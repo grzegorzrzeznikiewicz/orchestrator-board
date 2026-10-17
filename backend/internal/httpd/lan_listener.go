@@ -105,6 +105,9 @@ func isLANControlBlockedRequest(method, path string) bool {
 // beneath it ("/api/v1/mobile/status") but must not catch unrelated siblings
 // such as "/api/v1/mobileapp".
 func isLANControlBlockedPath(path string) bool {
+	if isLocalWorkflowDecisionPath(path) {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/v1/sessions/") && strings.HasSuffix(strings.TrimSuffix(path, "/"), "/preview/server") {
 		return true
 	}
@@ -393,4 +396,13 @@ func (m *LANManager) BoundPort() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.bound
+}
+
+// isLocalWorkflowDecisionPath matches one session-scoped desktop decision route.
+func isLocalWorkflowDecisionPath(path string) bool {
+	if !strings.HasPrefix(path, "/api/v1/sessions/") {
+		return false
+	}
+	parts := strings.Split(strings.TrimRight(strings.TrimPrefix(path, "/api/v1/sessions/"), "/"), "/")
+	return len(parts) == 3 && parts[0] != "" && parts[1] == "local-workflow" && parts[2] == "decision"
 }

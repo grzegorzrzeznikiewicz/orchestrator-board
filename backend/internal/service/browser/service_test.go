@@ -67,7 +67,7 @@ func TestServiceRequiresOwningCapabilityAndLiveSession(t *testing.T) {
 	if _, action, err := service.Execute(context.Background(), "s1", token, "DEVTOOLS-OPEN", nil); err != nil || action != "devtools-open" || runtime.action != "devtools-open" {
 		t.Fatalf("devtools action=%q runtime=%q err=%v", action, runtime.action, err)
 	}
-	for _, action := range []string{"devtools-toggle", "devtools-focus"} {
+	for _, action := range []string{"devtools-toggle", "devtools-focus", "__confirm-local-workflow-decision"} {
 		if _, _, err := service.Execute(context.Background(), "s1", token, action, nil); apiErrorCode(err) != "BROWSER_ACTION_UNSUPPORTED" {
 			t.Fatalf("agent-facing %s error = %v", action, err)
 		}

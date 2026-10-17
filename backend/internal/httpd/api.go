@@ -229,7 +229,12 @@ func (a *API) Register(root chi.Router) {
 			r.Use(func(next http.Handler) http.Handler {
 				ordinary := middleware.Timeout(timeout)(next)
 				upload := middleware.Timeout(max(timeout, 10*time.Minute))(next)
+				decision := middleware.Timeout(max(timeout, 65*time.Second))(next)
 				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					if req.Method == http.MethodPost && isLocalWorkflowDecisionPath(req.URL.Path) {
+						decision.ServeHTTP(w, req)
+						return
+					}
 					if attachmentUploadRoute(req) {
 						upload.ServeHTTP(w, req)
 						return

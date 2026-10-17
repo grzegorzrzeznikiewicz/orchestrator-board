@@ -406,6 +406,13 @@ type LocalWorkflow struct {
 	RecordJson string
 }
 
+type LocalWorkflowDecision struct {
+	ID         string
+	WorkflowID string
+	RequestID  string
+	RecordJson string
+}
+
 type LocalWorkflowOperation struct {
 	ID              string
 	WorkflowID      string

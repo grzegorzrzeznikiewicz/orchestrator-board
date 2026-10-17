@@ -262,6 +262,22 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 	if r.BlockCode == "round_limit" {
 		next = domain.WorkflowFixing
 	}
+	// A recorded user return is durable work. Losing the controller or daemon
+	// before reservation must not turn Resume into verification of unchanged files.
+	decisions, e := c.deps.Store.ListLocalWorkflowDecisions(ctx, r.ID)
+	if e != nil {
+		return Snapshot{}, e
+	}
+	if len(decisions) > 0 {
+		decision := decisions[len(decisions)-1]
+		fix := latestOperation(ops, "fix", r.Cycle)
+		if decision.Kind == "changes_requested" && decision.Cycle == r.Cycle && (fix == nil || fix.InputOperationID != decision.ID) {
+			if r.MaxRounds <= r.Cycle {
+				return Snapshot{}, fmt.Errorf("%w: explicitly increase the round limit to continue", domain.ErrLocalWorkflowConflict)
+			}
+			next = domain.WorkflowFixing
+		}
+	}
 	r.Phase = next
 	r.StopRequested = false
 	r.BlockCode = ""

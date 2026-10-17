@@ -9,12 +9,12 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 )
 
-func startLocalWorkflow(ctx context.Context, store *sqlite.Store, manager sessionLifecycle, chat localworkflow.ChatInterrupter, reviews localworkflow.Reviews, dataDir string, log *slog.Logger) (*localworkflow.Coordinator, error) {
+func startLocalWorkflow(ctx context.Context, store *sqlite.Store, manager sessionLifecycle, chat localworkflow.ChatInterrupter, reviews localworkflow.Reviews, decisions localworkflow.DecisionConfirmer, dataDir string, log *slog.Logger) (*localworkflow.Coordinator, error) {
 	delivery, ok := manager.(localworkflow.WorkerDelivery)
 	if !ok {
 		return nil, fmt.Errorf("session manager does not support durable workflow delivery")
 	}
-	coordinator := localworkflow.New(localworkflow.Deps{Store: store, Worker: localworkflow.NewSessionWorker(store, delivery, chat), Tests: localworkflow.NewTestRunner(dataDir), Reviews: reviews, DataDir: dataDir, Logger: log})
+	coordinator := localworkflow.New(localworkflow.Deps{Decisions: decisions, Store: store, Worker: localworkflow.NewSessionWorker(store, delivery, chat), Tests: localworkflow.NewTestRunner(dataDir), Reviews: reviews, DataDir: dataDir, Logger: log})
 	if e := coordinator.Recover(ctx); e != nil {
 		_ = coordinator.Close(context.Background())
 		return nil, e

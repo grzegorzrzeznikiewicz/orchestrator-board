@@ -6,6 +6,7 @@ export type { FeatureBuild } from "../../main/feature-builds";
 export const aoBridge: AoBridge =
 	window.ao ??
 	({
+		localWorkflow: { available: false, decide: async () => { throw new Error("Use the desktop app on this host to make a decision."); } },
 		app: {
 			getVersion: async () => "0.0.0-preview",
 			chooseDirectory: async () => null,

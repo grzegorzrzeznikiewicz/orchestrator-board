@@ -22,6 +22,7 @@ type LocalWorkflowService interface {
 	Stop(context.Context, domain.SessionID, int64) (localworkflow.Snapshot, error)
 	Resume(context.Context, domain.SessionID, int64, *int) (localworkflow.Snapshot, error)
 	TestLog(context.Context, domain.SessionID, string, string) (localworkflow.TestLog, error)
+	Decide(context.Context, domain.SessionID, localworkflow.DecisionRequest) (localworkflow.Snapshot, error)
 }
 
 // LocalWorkflowController mounts explicit local workflow control routes.
@@ -33,6 +34,7 @@ func (c *LocalWorkflowController) Register(r chi.Router) {
 	r.Post("/sessions/{sessionId}/local-workflow/start", c.start)
 	r.Post("/sessions/{sessionId}/local-workflow/stop", c.stop)
 	r.Post("/sessions/{sessionId}/local-workflow/resume", c.resume)
+	r.Post("/sessions/{sessionId}/local-workflow/decision", c.decide)
 	r.Get("/sessions/{sessionId}/local-workflow/tests/{testId}/logs", c.log)
 }
 func (c *LocalWorkflowController) available(w http.ResponseWriter, r *http.Request, suffix string) bool {
@@ -44,7 +46,7 @@ func (c *LocalWorkflowController) available(w http.ResponseWriter, r *http.Reque
 }
 func localWorkflowResponse(w http.ResponseWriter, r *http.Request, result localworkflow.Snapshot, err error) {
 	if err == nil {
-		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{Run: result.Run, Operations: result.Operations, Tests: result.Tests, Current: result.Current, RequiredFindings: result.RequiredFindings, Stage: result.Stage, Reviews: result.Reviews})
+		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{Run: result.Run, Operations: result.Operations, Tests: result.Tests, Current: result.Current, RequiredFindings: result.RequiredFindings, Stage: result.Stage, Reviews: result.Reviews, Accepted: result.Accepted, Decisions: result.Decisions})
 		return
 	}
 	status := http.StatusInternalServerError
@@ -52,6 +54,16 @@ func localWorkflowResponse(w http.ResponseWriter, r *http.Request, result localw
 	code := "LOCAL_WORKFLOW_FAILED"
 	message := "Local workflow operation failed"
 	switch {
+	case errors.Is(err, localworkflow.ErrDecisionDenied):
+		status = 403
+		kind = "forbidden"
+		code = "LOCAL_WORKFLOW_DECISION_DENIED"
+		message = "Desktop confirmation was cancelled or denied"
+	case errors.Is(err, localworkflow.ErrDecisionUnavailable):
+		status = 503
+		kind = "unavailable"
+		code = "LOCAL_WORKFLOW_DECISION_UNAVAILABLE"
+		message = "Desktop decision confirmation is unavailable"
 	case errors.Is(err, domain.ErrLocalWorkflowConflict):
 		status = 409
 		kind = "conflict"
@@ -133,6 +145,18 @@ func (c *LocalWorkflowController) resume(w http.ResponseWriter, r *http.Request)
 	}
 	result, e := c.Svc.Resume(r.Context(), sessionID(r), in.ExpectedVersion, in.MaxRounds)
 	localWorkflowResponse(w, r, result, e)
+}
+
+func (c *LocalWorkflowController) decide(w http.ResponseWriter, r *http.Request) {
+	if !c.available(w, r, "/decision") {
+		return
+	}
+	var in DecideLocalWorkflowRequest
+	if !strictWorkflowJSON(w, r, &in) {
+		return
+	}
+	result, err := c.Svc.Decide(r.Context(), sessionID(r), localworkflow.DecisionRequest{RequestID: in.RequestID, IntentID: in.IntentID, WorkflowID: in.WorkflowID, ExpectedVersion: in.ExpectedVersion, Kind: in.Kind, Comment: in.Comment, SnapshotID: in.SnapshotID, TestOperationID: in.TestOperationID, ReviewRunID: in.ReviewRunID})
+	localWorkflowResponse(w, r, result, err)
 }
 func (c *LocalWorkflowController) log(w http.ResponseWriter, r *http.Request) {
 	if !c.available(w, r, "/tests/{testId}/logs") {

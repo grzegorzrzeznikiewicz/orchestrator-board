@@ -1,3 +1,4 @@
+import { aoBridge } from "../lib/bridge";
 import { useQuery } from "@tanstack/react-query";
 import { LocalWorkflowHistory } from "./LocalWorkflowHistory";
 import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
@@ -19,6 +20,45 @@ export function LocalWorkflowPanel({
   const data = query.data;
   const run = data?.run;
   const [limit, setLimit] = useState(3);
+  const feedbackOwner = JSON.stringify([
+    sessionId,
+    hostId ?? null,
+    run?.id,
+    run?.version,
+  ]);
+  const [feedback, setFeedback] = useState({ owner: "", text: "" });
+  const comment = feedback.owner === feedbackOwner ? feedback.text : "";
+  const desktop = !hostId && aoBridge.localWorkflow.available;
+  const test = [...(data?.operations ?? [])]
+    .reverse()
+    .find((op) => op.kind === "tests" && op.cycle === run?.cycle);
+  const review = [...(data?.operations ?? [])]
+    .reverse()
+    .find((op) => op.kind === "review" && op.cycle === run?.cycle);
+  const canDecide =
+    desktop &&
+    run?.phase === "ready" &&
+    data?.current &&
+    !data.requiredFindings.length &&
+    test?.state === "succeeded" &&
+    review?.state === "succeeded" &&
+    review.inputOperationId === test.id &&
+    test.snapshotId === review.snapshotId &&
+    !!review.reviewRunId;
+  const validComment = [...comment].length <= 4000 && !comment.includes("\0");
+  function decide(kind: "accept" | "request_changes") {
+    if (!canDecide || !run || !test?.snapshotId || !review?.reviewRunId) return;
+    action.mutate({
+      kind,
+      version: run.version,
+      workflowId: run.id,
+      snapshotId: test.snapshotId,
+      testOperationId: test.id,
+      reviewRunId: review.reviewRunId,
+      comment,
+    });
+  }
+
   const [selectedLog, setSelectedLog] = useState<{
     sessionId: string;
     hostId?: string;
@@ -105,6 +145,54 @@ export function LocalWorkflowPanel({
                   : "localWorkflow.stale",
               )}
             </p>
+          )}
+          {run.phase === "ready" && (
+            <div className="space-y-2">
+              {data?.accepted && <p>{t("localWorkflow.userAccepted")}</p>}
+              {!desktop && <p>{t("localWorkflow.desktopRequired")}</p>}
+              <label className="block">
+                {t("localWorkflow.decisionComment")}
+                <textarea
+                  aria-label={t("localWorkflow.decisionComment")}
+                  className="mt-1 block w-full rounded border border-input bg-background p-2"
+                  value={comment}
+                  disabled={!canDecide || action.isPending}
+                  onChange={(e) =>
+                    setFeedback({ owner: feedbackOwner, text: e.target.value })
+                  }
+                />
+              </label>
+              <p className="text-muted-foreground">
+                {t("localWorkflow.commentLimit")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={
+                    !canDecide ||
+                    action.isPending ||
+                    !validComment ||
+                    data?.accepted
+                  }
+                  onClick={() => decide("accept")}
+                >
+                  {t("localWorkflow.accept")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    !canDecide ||
+                    action.isPending ||
+                    !validComment ||
+                    !comment.trim()
+                  }
+                  onClick={() => decide("request_changes")}
+                >
+                  {t("localWorkflow.requestChanges")}
+                </Button>
+              </div>
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {!["stopped", "stopping"].includes(run.phase) && (

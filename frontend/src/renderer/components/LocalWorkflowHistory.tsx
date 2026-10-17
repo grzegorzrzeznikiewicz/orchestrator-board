@@ -47,6 +47,46 @@ export function LocalWorkflowHistory({
 	return (
 		<section aria-label={t("localWorkflow.history")} className="space-y-3">
 			<h4 className="font-medium">{t("localWorkflow.history")}</h4>
+			{(data.decisions ?? []).length > 0 && (
+				<section
+					aria-label={t("localWorkflow.decisions")}
+					className="space-y-2"
+				>
+					<h5 className="font-medium">{t("localWorkflow.decisions")}</h5>
+					{(data.decisions ?? []).map((decision, index) => (
+						<article
+							key={decision.id}
+							className="space-y-1 rounded border border-border p-2"
+						>
+							<p>
+								{t(
+									decision.kind === "accepted"
+										? data.accepted && index === data.decisions.length - 1
+											? "localWorkflow.userAccepted"
+											: "localWorkflow.historicalAcceptance"
+										: "localWorkflow.userRequestedChanges",
+								)}
+							</p>
+							<p>
+								{t("localWorkflow.round", { round: decision.cycle })} ·{" "}
+								<time dateTime={decision.createdAt}>
+									{new Date(decision.createdAt).toLocaleString()}
+								</time>
+							</p>
+							<p>
+								{t("localWorkflow.snapshot")}:{" "}
+								<code className="break-all">{decision.snapshotId}</code>
+							</p>
+							<p className="text-muted-foreground break-all">
+								{decision.testOperationId} · {decision.reviewRunId}
+							</p>
+							{decision.comment && (
+								<p className="whitespace-pre-wrap">{decision.comment}</p>
+							)}
+						</article>
+					))}
+				</section>
+			)}
 			{cycles.map((cycle) => (
 				<section
 					key={cycle}

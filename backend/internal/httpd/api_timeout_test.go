@@ -11,9 +11,30 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/config"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/controllers"
+	"github.com/aoagents/agent-orchestrator/backend/internal/localworkflow"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	sessionsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/session"
 )
+
+type workflowDecisionBudgetProbe struct {
+	controllers.LocalWorkflowService
+	budget time.Duration
+}
+
+func (s *workflowDecisionBudgetProbe) Decide(ctx context.Context, _ domain.SessionID, _ localworkflow.DecisionRequest) (localworkflow.Snapshot, error) {
+	s.budget = remainingRequestBudget(ctx)
+	return localworkflow.Snapshot{}, nil
+}
+
+func TestWorkflowDecisionAllowsNativeConfirmationBudget(t *testing.T) {
+	svc := &workflowDecisionBudgetProbe{}
+	router := NewRouterWithControl(config.Config{RequestTimeout: 250 * time.Millisecond}, discardLogger(), nil, APIDeps{LocalWorkflow: svc}, ControlDeps{})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/sessions/worker/local-workflow/decision", bytes.NewBufferString(`{}`)))
+	if response.Code != 200 || svc.budget < 60*time.Second || svc.budget > 65*time.Second {
+		t.Fatalf("decision budget: status=%d budget=%s", response.Code, svc.budget)
+	}
+}
 
 type timeoutProbeSessionService struct {
 	controllers.SessionService

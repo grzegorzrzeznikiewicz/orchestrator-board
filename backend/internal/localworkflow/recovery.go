@@ -24,7 +24,12 @@ func (c *Coordinator) Recover(ctx context.Context) error {
 				unlock()
 				return err
 			}
-			if op := latestOperation(ops, "fix", r.Cycle); op != nil {
+			input, _, err := c.fixInput(ctx, r, ops)
+			if err != nil {
+				unlock()
+				return err
+			}
+			if op := latestOperation(ops, "fix", r.Cycle); op != nil && op.InputOperationID == input {
 				obs, err := c.deps.Worker.Observe(ctx, r.SessionID, op.ID)
 				if err != nil {
 					e = c.block(ctx, r, "executor_error", err)

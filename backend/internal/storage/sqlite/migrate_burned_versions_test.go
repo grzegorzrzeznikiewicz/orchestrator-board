@@ -204,6 +204,7 @@ var shippedMigrations = map[int64]string{
 	199: "0199_local_review.sql",
 	200: "0200_local_review_result.sql",
 	201: "0201_local_workflow.sql",
+	202: "0202_local_workflow_decision.sql",
 }
 
 // burnedVersion reports version numbers that must never be (re)used: they

@@ -146,3 +146,10 @@ describe("local workflow lanes", () => {
 		).toBeNull();
 	});
 });
+
+it("places only the daemon accepted stage in Accepted",async()=>{
+ get.mockResolvedValue({data:{run:{id:"wf",phase:"ready",cycle:1,maxRounds:3},current:true,accepted:true,stage:"accepted",operations:[],tests:[],reviews:[],requiredFindings:[],decisions:[]}});
+ show();
+ const column=screen.getByRole("region",{name:"Accepted sessions"});
+ expect(await within(column).findByText("Task without PR")).toBeVisible();
+});
