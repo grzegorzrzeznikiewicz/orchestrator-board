@@ -7420,6 +7420,69 @@ paths:
       summary: Read local workflow execution facts
       tags:
       - reviews
+  /api/v1/sessions/{sessionId}/local-workflow/decision:
+    post:
+      operationId: decideLocalWorkflow
+      parameters:
+      - description: Session identifier, e.g. project-1.
+        in: path
+        name: sessionId
+        required: true
+        schema:
+          description: Session identifier, e.g. project-1.
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideLocalWorkflowRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalWorkflowResponse'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Internal Server Error
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: Request a native desktop user decision for verified local changes
+      tags:
+      - reviews
   /api/v1/sessions/{sessionId}/local-workflow/resume:
     post:
       operationId: resumeLocalWorkflow
@@ -13975,6 +14038,41 @@ components:
       - createdAt
       - updatedAt
       type: object
+    DecideLocalWorkflowRequest:
+      properties:
+        comment:
+          type: string
+        expectedVersion:
+          format: int64
+          type: integer
+        intentId:
+          type: string
+        kind:
+          enum:
+          - accepted
+          - changes_requested
+          type: string
+        requestId:
+          type: string
+        reviewRunId:
+          type: string
+        snapshotId:
+          type: string
+        testOperationId:
+          type: string
+        workflowId:
+          type: string
+      required:
+      - requestId
+      - intentId
+      - workflowId
+      - expectedVersion
+      - kind
+      - comment
+      - snapshotId
+      - testOperationId
+      - reviewRunId
+      type: object
     DegradedProject:
       properties:
         id:
@@ -15183,6 +15281,53 @@ components:
       - summary
       - findings
       type: object
+    LocalWorkflowDecision:
+      properties:
+        comment:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        cycle:
+          type: integer
+        expectedVersion:
+          format: int64
+          type: integer
+        id:
+          type: string
+        kind:
+          enum:
+          - accepted
+          - changes_requested
+          type: string
+        requestId:
+          type: string
+        reviewRunId:
+          type: string
+        snapshotId:
+          type: string
+        source:
+          enum:
+          - desktop_user
+          type: string
+        testOperationId:
+          type: string
+        workflowId:
+          type: string
+      required:
+      - id
+      - workflowId
+      - requestId
+      - kind
+      - comment
+      - source
+      - cycle
+      - expectedVersion
+      - snapshotId
+      - testOperationId
+      - reviewRunId
+      - createdAt
+      type: object
     LocalWorkflowOperation:
       properties:
         attempt:
@@ -15239,8 +15384,14 @@ components:
       type: object
     LocalWorkflowResponse:
       properties:
+        accepted:
+          type: boolean
         current:
           type: boolean
+        decisions:
+          items:
+            $ref: '#/components/schemas/LocalWorkflowDecision'
+          type: array
         operations:
           items:
             $ref: '#/components/schemas/LocalWorkflowOperation'
@@ -15265,6 +15416,7 @@ components:
           - local_review
           - fixing
           - awaiting_acceptance
+          - accepted
           type: string
         tests:
           items:
@@ -15272,6 +15424,8 @@ components:
           type: array
       required:
       - stage
+      - decisions
+      - accepted
       - reviews
       - run
       - operations

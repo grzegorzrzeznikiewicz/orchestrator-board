@@ -1,3 +1,4 @@
+import { LOCAL_WORKFLOW_DECIDE_CHANNEL, type LocalWorkflowDecisionInput, type LocalWorkflowDecisionReply } from "./shared/local-workflow-decisions";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { APP_SHORTCUT_CHANNEL, CLOSE_SHELL_TERMINAL_SHORTCUT_CHANNEL, KEYBOARD_SHORTCUTS_HELP_CHANNEL, NEXT_SESSION_SHORTCUT_CHANNEL, NEXT_TAB_SHORTCUT_CHANNEL, NEW_SESSION_SHORTCUT_CHANNEL, NEW_SHELL_TERMINAL_SHORTCUT_CHANNEL, OPEN_SETTINGS_SHORTCUT_CHANNEL, PREVIOUS_SESSION_SHORTCUT_CHANNEL, PREVIOUS_TAB_SHORTCUT_CHANNEL, SET_CLOSE_SHELL_TERMINAL_SHORTCUT_ENABLED_CHANNEL, SET_TERMINAL_FOCUSED_CHANNEL, TERMINAL_FONT_SIZE_SHORTCUT_CHANNEL, type AppShortcutEvent, type KeybindingOverrides } from "./shared/shortcuts";
 import {
@@ -185,6 +186,10 @@ function isRendererQueuePurgeRequest(value: unknown): value is RendererTelemetry
 }
 
 const api = {
+ localWorkflow: {
+ available: true,
+ decide: (input: LocalWorkflowDecisionInput): Promise<LocalWorkflowDecisionReply> => ipcRenderer.invoke(LOCAL_WORKFLOW_DECIDE_CHANNEL, input),
+ },
 	app: {
 		getVersion: () => ipcRenderer.invoke("app:getVersion") as Promise<string>,
 		chooseDirectory: (input?: string | { title?: string; defaultPath?: string }) => ipcRenderer.invoke("app:chooseDirectory", input) as Promise<string | null>,

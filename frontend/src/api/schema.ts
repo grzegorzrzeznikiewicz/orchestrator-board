@@ -2545,6 +2545,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/local-workflow/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request a native desktop user decision for verified local changes */
+        post: operations["decideLocalWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/local-workflow/resume": {
         parameters: {
             query?: never;
@@ -4730,6 +4747,19 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        DecideLocalWorkflowRequest: {
+            comment: string;
+            /** Format: int64 */
+            expectedVersion: number;
+            intentId: string;
+            /** @enum {string} */
+            kind: "accepted" | "changes_requested";
+            requestId: string;
+            reviewRunId: string;
+            snapshotId: string;
+            testOperationId: string;
+            workflowId: string;
+        };
         DegradedProject: {
             id: string;
             /** @enum {string} */
@@ -5160,6 +5190,24 @@ export interface components {
             summary: string;
             version: number;
         };
+        LocalWorkflowDecision: {
+            comment: string;
+            /** Format: date-time */
+            createdAt: string;
+            cycle: number;
+            /** Format: int64 */
+            expectedVersion: number;
+            id: string;
+            /** @enum {string} */
+            kind: "accepted" | "changes_requested";
+            requestId: string;
+            reviewRunId: string;
+            snapshotId: string;
+            /** @enum {string} */
+            source: "desktop_user";
+            testOperationId: string;
+            workflowId: string;
+        };
         LocalWorkflowOperation: {
             attempt: number;
             /** Format: date-time */
@@ -5181,13 +5229,15 @@ export interface components {
             workflowId: string;
         };
         LocalWorkflowResponse: {
+            accepted: boolean;
             current: boolean;
+            decisions: components["schemas"]["LocalWorkflowDecision"][];
             operations: components["schemas"]["LocalWorkflowOperation"][];
             requiredFindings: components["schemas"]["LocalReviewFinding"][];
             reviews: components["schemas"]["ReviewRun"][];
             run: null | components["schemas"]["LocalWorkflowRun"];
             /** @enum {string} */
-            stage: "executing" | "testing" | "local_review" | "fixing" | "awaiting_acceptance";
+            stage: "executing" | "testing" | "local_review" | "fixing" | "awaiting_acceptance" | "accepted";
             tests: components["schemas"]["LocalWorkflowTestResult"][];
         };
         LocalWorkflowRun: {
@@ -15999,6 +16049,87 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkflowResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    decideLocalWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session identifier, e.g. project-1. */
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideLocalWorkflowRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

@@ -3211,5 +3211,14 @@
 	"localWorkflow.verdict.unknown": "No verdict",
 	"localWorkflow.logTitle": "{{command}} \u00b7 {{stream}}",
 	"localWorkflow.prBoard": "Pull request workflow",
-	"localWorkflow.requiredCount_many": "{{count}} required findings"
+	"localWorkflow.requiredCount_many": "{{count}} required findings",
+	"localWorkflow.accept": "Accept changes",
+	"localWorkflow.requestChanges": "Request changes",
+	"localWorkflow.decisionComment": "Decision comment",
+	"localWorkflow.commentLimit": "Up to 4000 characters. A comment is required when requesting changes.",
+	"localWorkflow.desktopRequired": "Use the desktop app on this host to make a decision.",
+	"localWorkflow.userAccepted": "Accepted by you",
+	"localWorkflow.historicalAcceptance": "Historical acceptance",
+	"localWorkflow.userRequestedChanges": "Changes requested by you",
+	"localWorkflow.decisions": "User decisions"
 }

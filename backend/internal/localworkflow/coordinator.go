@@ -29,6 +29,9 @@ type Store interface {
 	CompleteLocalWorkflowOperation(context.Context, int64, domain.LocalWorkflowOperation, domain.LocalWorkflowRun, []domain.LocalWorkflowTestResult) (bool, error)
 	ListLocalWorkflowOperations(context.Context, string) ([]domain.LocalWorkflowOperation, error)
 	ListLocalWorkflowTests(context.Context, string) ([]domain.LocalWorkflowTestResult, error)
+	ListLocalWorkflowDecisions(context.Context, string) ([]domain.LocalWorkflowDecision, error)
+	LocalWorkflowDecisionByRequest(context.Context, string, string) (domain.LocalWorkflowDecision, bool, error)
+	RecordLocalWorkflowDecision(context.Context, int64, domain.LocalWorkflowRun, domain.LocalWorkflowDecision) (bool, error)
 }
 
 // Reviews is the independent local reviewer boundary consumed by the coordinator.
@@ -40,7 +43,9 @@ type Reviews interface {
 
 // Snapshot is a read model of the current workflow and its accumulated evidence.
 type Snapshot struct {
-	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance"`
+	Decisions        []domain.LocalWorkflowDecision   `json:"decisions"`
+	Accepted         bool                             `json:"accepted"`
+	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance,accepted"`
 	Reviews          []domain.ReviewRun               `json:"reviews"`
 	Run              *domain.LocalWorkflowRun         `json:"run"`
 	Operations       []domain.LocalWorkflowOperation  `json:"operations"`
@@ -51,13 +56,14 @@ type Snapshot struct {
 
 // Deps supplies durable storage, worker, test and review boundaries.
 type Deps struct {
-	Store   Store
-	Worker  Worker
-	Tests   TestRunner
-	Reviews Reviews
-	DataDir string
-	Clock   func() time.Time
-	Logger  *slog.Logger
+	Decisions DecisionConfirmer
+	Store     Store
+	Worker    Worker
+	Tests     TestRunner
+	Reviews   Reviews
+	DataDir   string
+	Clock     func() time.Time
+	Logger    *slog.Logger
 }
 
 // Coordinator owns local workflow transitions and live content observations.
@@ -246,7 +252,7 @@ func (c *Coordinator) Get(ctx context.Context, id domain.SessionID) (Snapshot, e
 		return Snapshot{}, e
 	}
 	if !ok {
-		return Snapshot{Stage: "executing", Reviews: []domain.ReviewRun{}, Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
+		return Snapshot{Decisions: []domain.LocalWorkflowDecision{}, Stage: "executing", Reviews: []domain.ReviewRun{}, Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
 	}
 	return c.snapshot(ctx, r)
 }
@@ -282,8 +288,13 @@ func (c *Coordinator) snapshot(ctx context.Context, r domain.LocalWorkflowRun) (
 				}
 			}
 		}
-		snap.Current = r.Phase == domain.WorkflowReady && review.Current && review.Verdict == domain.VerdictApproved && c.checkGuard(ctx, r.ID) == nil
 	}
+	snap.Decisions, e = c.deps.Store.ListLocalWorkflowDecisions(ctx, r.ID)
+	if e != nil {
+		return snap, e
+	}
+	snap.Current = currentEvidence(snap) && c.checkGuard(ctx, r.ID) == nil
+	snap.Accepted = acceptedEvidence(snap)
 	snap.Stage = workflowStage(snap)
 
 	return snap, nil
@@ -379,8 +390,11 @@ func (c *Coordinator) Evaluate(ctx context.Context, id string) error {
 		return c.consumeReview(ctx, r, *op, result)
 	case domain.WorkflowFixing:
 		op := latestOperation(ops, "fix", r.Cycle)
-		review := latestOperation(ops, "review", r.Cycle)
-		if op == nil || review != nil && op.InputOperationID != review.ID {
+		input, _, err := c.fixInput(ctx, r, ops)
+		if err != nil {
+			return c.block(ctx, r, "review_error", err)
+		}
+		if op == nil || op.InputOperationID != input {
 			return c.beginFix(ctx, r, ops)
 		}
 		if c.isActive(op.ID) {
@@ -586,25 +600,19 @@ func (c *Coordinator) beginFix(ctx context.Context, r domain.LocalWorkflowRun, o
 		return c.block(ctx, r, "executor_"+obs.State, fmt.Errorf("executor is %s before corrections", obs.State))
 	}
 
-	review := latestOperation(ops, "review", r.Cycle)
-	if review == nil {
-		return c.block(ctx, r, "review_error", fmt.Errorf("review result missing before corrections"))
-	}
-	result, e := c.deps.Reviews.GetWorkflowLocal(ctx, review.ReviewRunID)
-	if e != nil || result.LocalResult == nil {
-		if e == nil {
-			e = fmt.Errorf("structured findings missing")
-		}
+	input, text, e := c.fixInput(ctx, r, ops)
+	if e != nil {
 		return c.block(ctx, r, "review_error", e)
 	}
 	op := c.newOperation(r, ops, "fix")
-	op.SnapshotID = review.SnapshotID
-	op.InputOperationID = review.ID
+	if review := latestOperation(ops, "review", r.Cycle); review != nil {
+		op.SnapshotID = review.SnapshotID
+	}
+	op.InputOperationID = input
 	_, ok, e := c.reserve(ctx, r, domain.WorkflowFixing, op)
 	if e != nil || !ok {
 		return e
 	}
-	text := BuildFixPrompt(r, *result.LocalResult)
 	c.launch(op.ID, func(background context.Context) {
 		obs, sendErr := c.deps.Worker.DeliverFix(background, r.SessionID, op.ID, text)
 		unlock := c.lock(r.ID)

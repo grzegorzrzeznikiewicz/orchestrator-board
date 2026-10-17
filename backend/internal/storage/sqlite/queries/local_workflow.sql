@@ -39,3 +39,12 @@ UPDATE review_run SET workflow_operation_id=@operation_id WHERE id=@id AND workf
 
 -- name: ReviewByWorkflowOperation :one
 SELECT id FROM review_run WHERE workflow_operation_id=?;
+
+-- name: InsertLocalWorkflowDecision :exec
+INSERT INTO local_workflow_decision(id,workflow_id,request_id,record_json) VALUES(?,?,?,?);
+
+-- name: ListLocalWorkflowDecisions :many
+SELECT record_json FROM local_workflow_decision WHERE workflow_id=? ORDER BY rowid;
+
+-- name: LocalWorkflowDecisionByRequest :one
+SELECT record_json FROM local_workflow_decision WHERE workflow_id=? AND request_id=?;

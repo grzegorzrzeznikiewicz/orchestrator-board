@@ -19,3 +19,8 @@ func BuildFixPrompt(run domain.LocalWorkflowRun, result domain.LocalReviewResult
 	b.WriteString("\nFix the required issues and finish your turn. AO will run the configured tests and request a fresh independent review. Optional suggestions do not block this task. Leave changes uncommitted. Do not create commits, push, or create PRs/MRs. Preserve the user's other instructions and existing work.\n")
 	return b.String()
 }
+
+// BuildUserFixPrompt preserves user feedback as a separate correction source.
+func BuildUserFixPrompt(run domain.LocalWorkflowRun, decision domain.LocalWorkflowDecision) string {
+	return fmt.Sprintf("Continue the original task and satisfy its acceptance criteria.\n\n%s\n\nLatest user instruction:\n%s\n\nUser requested corrections for snapshot %s:\n%s\n\nFinish your turn after the corrections. AO will run fresh tests and independent review. Leave changes uncommitted. Do not create commits, push, create PRs/MRs, merge or deploy. Preserve the user's other instructions and existing work.\n", run.Task, run.LatestUserPrompt, decision.SnapshotID, decision.Comment)
+}

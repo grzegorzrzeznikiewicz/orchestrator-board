@@ -144,6 +144,27 @@ func (q *Queries) InsertLocalWorkflow(ctx context.Context, arg InsertLocalWorkfl
 	return err
 }
 
+const insertLocalWorkflowDecision = `-- name: InsertLocalWorkflowDecision :exec
+INSERT INTO local_workflow_decision(id,workflow_id,request_id,record_json) VALUES(?,?,?,?)
+`
+
+type InsertLocalWorkflowDecisionParams struct {
+	ID         string
+	WorkflowID string
+	RequestID  string
+	RecordJson string
+}
+
+func (q *Queries) InsertLocalWorkflowDecision(ctx context.Context, arg InsertLocalWorkflowDecisionParams) error {
+	_, err := q.db.ExecContext(ctx, insertLocalWorkflowDecision,
+		arg.ID,
+		arg.WorkflowID,
+		arg.RequestID,
+		arg.RecordJson,
+	)
+	return err
+}
+
 const insertLocalWorkflowOperation = `-- name: InsertLocalWorkflowOperation :exec
 INSERT INTO local_workflow_operation(id,workflow_id,cycle,kind,attempt,state,client_message_id,record_json) VALUES(?,?,?,?,?,?,?,?)
 `
@@ -192,6 +213,33 @@ func (q *Queries) InsertLocalWorkflowTest(ctx context.Context, arg InsertLocalWo
 		arg.RecordJson,
 	)
 	return err
+}
+
+const listLocalWorkflowDecisions = `-- name: ListLocalWorkflowDecisions :many
+SELECT record_json FROM local_workflow_decision WHERE workflow_id=? ORDER BY rowid
+`
+
+func (q *Queries) ListLocalWorkflowDecisions(ctx context.Context, workflowID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listLocalWorkflowDecisions, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var record_json string
+		if err := rows.Scan(&record_json); err != nil {
+			return nil, err
+		}
+		items = append(items, record_json)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLocalWorkflowOperations = `-- name: ListLocalWorkflowOperations :many
@@ -330,6 +378,22 @@ func (q *Queries) LocalWorkflowByRequest(ctx context.Context, arg LocalWorkflowB
 		&i.RecordJson,
 	)
 	return i, err
+}
+
+const localWorkflowDecisionByRequest = `-- name: LocalWorkflowDecisionByRequest :one
+SELECT record_json FROM local_workflow_decision WHERE workflow_id=? AND request_id=?
+`
+
+type LocalWorkflowDecisionByRequestParams struct {
+	WorkflowID string
+	RequestID  string
+}
+
+func (q *Queries) LocalWorkflowDecisionByRequest(ctx context.Context, arg LocalWorkflowDecisionByRequestParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, localWorkflowDecisionByRequest, arg.WorkflowID, arg.RequestID)
+	var record_json string
+	err := row.Scan(&record_json)
+	return record_json, err
 }
 
 const reviewByWorkflowOperation = `-- name: ReviewByWorkflowOperation :one

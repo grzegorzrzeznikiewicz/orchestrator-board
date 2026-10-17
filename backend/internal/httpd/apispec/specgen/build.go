@@ -159,6 +159,8 @@ var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names
 	"DomainLocalWorkflowOperation":                         "LocalWorkflowOperation",
 	"DomainLocalWorkflowTestResult":                        "LocalWorkflowTestResult",
 	"ControllersLocalWorkflowResponse":                     "LocalWorkflowResponse",
+	"DomainLocalWorkflowDecision":                          "LocalWorkflowDecision",
+	"ControllersDecideLocalWorkflowRequest":                "DecideLocalWorkflowRequest",
 	"ControllersStartLocalWorkflowRequest":                 "StartLocalWorkflowRequest",
 	"ControllersStopLocalWorkflowRequest":                  "StopLocalWorkflowRequest",
 	"ControllersResumeLocalWorkflowRequest":                "ResumeLocalWorkflowRequest",
@@ -3401,6 +3403,7 @@ func localWorkflowOperations() []operation {
 		{method: http.MethodPost, path: base + "/start", id: "startLocalWorkflow", summary: "Start an explicit local workflow", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StartLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
 		{method: http.MethodPost, path: base + "/stop", id: "stopLocalWorkflow", summary: "Stop local workflow execution", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StopLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
 		{method: http.MethodPost, path: base + "/resume", id: "resumeLocalWorkflow", summary: "Explicitly resume local workflow execution", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.ResumeLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
+		{method: http.MethodPost, path: base + "/decision", id: "decideLocalWorkflow", summary: "Request a native desktop user decision for verified local changes", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.DecideLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
 		{method: http.MethodGet, path: base + "/tests/{testId}/logs", id: "getLocalWorkflowTestLog", summary: "Read bounded stdout or stderr for a workflow test", tag: "reviews", pathParams: []any{controllers.LocalWorkflowTestLogParams{}}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowTestLogResponse{}}}},
 	}
 	for i := range operations {

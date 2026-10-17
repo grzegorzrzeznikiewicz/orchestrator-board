@@ -33,6 +33,53 @@ func (s workflowHTTPService) Resume(ctx context.Context, id domain.SessionID, _ 
 func (s workflowHTTPService) TestLog(context.Context, domain.SessionID, string, string) (localworkflow.TestLog, error) {
 	return localworkflow.TestLog{Text: "output"}, s.err
 }
+
+func (s workflowHTTPService) Decide(ctx context.Context, id domain.SessionID, in localworkflow.DecisionRequest) (localworkflow.Snapshot, error) {
+	if in.IntentID != "private-intent" || in.WorkflowID != "wf" || in.Kind != "accepted" || in.ExpectedVersion != 4 || in.SnapshotID != "snapshot" || in.TestOperationID != "tests" || in.ReviewRunID != "review" {
+		return localworkflow.Snapshot{}, domain.ErrLocalWorkflowInvalid
+	}
+	return localworkflow.Snapshot{Accepted: true, Stage: "accepted", Decisions: []domain.LocalWorkflowDecision{{ID: "decision", WorkflowID: "wf", Kind: "accepted", Source: "desktop_user", SnapshotID: "snapshot"}}}, s.err
+}
+
+func TestLocalWorkflowDecisionHTTPContract(t *testing.T) {
+	body := `{"requestId":"request","intentId":"private-intent","workflowId":"wf","expectedVersion":4,"kind":"accepted","comment":"checked","snapshotId":"snapshot","testOperationId":"tests","reviewRunId":"review"}`
+	for _, tc := range []struct {
+		name string
+		err  error
+		body string
+		want int
+		code string
+	}{
+		{"recorded", nil, body, 200, ""},
+		{"denied", localworkflow.ErrDecisionDenied, body, 403, "LOCAL_WORKFLOW_DECISION_DENIED"},
+		{"unavailable", localworkflow.ErrDecisionUnavailable, body, 503, "LOCAL_WORKFLOW_DECISION_UNAVAILABLE"},
+		{"conflict", domain.ErrLocalWorkflowConflict, body, 409, "LOCAL_WORKFLOW_CONFLICT"},
+		{"invalid", domain.ErrLocalWorkflowInvalid, body, 422, "LOCAL_WORKFLOW_INVALID"},
+		{"unknown actor", nil, strings.TrimSuffix(body, "}") + `,"actor":"user"}`, 400, "INVALID_JSON"},
+		{"trailing", nil, body + ` {}`, 400, "INVALID_JSON"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := httpd.NewRouterWithControl(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, httpd.APIDeps{LocalWorkflow: workflowHTTPService{err: tc.err}}, httpd.ControlDeps{})
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/worker/local-workflow/decision", strings.NewReader(tc.body))
+			req.Header.Set("X-Request-ID", "decision-http")
+			res := httptest.NewRecorder()
+			router.ServeHTTP(res, req)
+			if res.Code != tc.want {
+				t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+			}
+			if strings.Contains(res.Body.String(), "private-intent") {
+				t.Fatal("private intent leaked")
+			}
+			if tc.want == 200 {
+				if !strings.Contains(res.Body.String(), `"accepted":true`) || !strings.Contains(res.Body.String(), `"source":"desktop_user"`) {
+					t.Fatalf("decision missing: %s", res.Body.String())
+				}
+			} else if !strings.Contains(res.Body.String(), tc.code) || !strings.Contains(res.Body.String(), "decision-http") {
+				t.Fatalf("lost error envelope: %s", res.Body.String())
+			}
+		})
+	}
+}
 func TestLocalWorkflowHTTPContract(t *testing.T) {
 	for _, tc := range []struct {
 		name, method, body string

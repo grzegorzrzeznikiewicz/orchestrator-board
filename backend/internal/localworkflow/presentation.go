@@ -18,6 +18,9 @@ func workflowStage(s Snapshot) string {
 	case domain.WorkflowFixing:
 		return "fixing"
 	case domain.WorkflowReady:
+		if s.Accepted {
+			return "accepted"
+		}
 		if s.Current {
 			return "awaiting_acceptance"
 		}

@@ -1,3 +1,5 @@
+import { createLocalWorkflowDecisionHost, registerLocalWorkflowDecisionIpc } from "./main/local-workflow-decisions";
+import { LOCAL_WORKFLOW_CONFIRM_ACTION } from "./shared/local-workflow-decisions";
 import { syncMacWindowButtons } from "./main/window-chrome";
 import { MAC_TITLEBAR_HEIGHT, MAC_WINDOW_BUTTON_X, MAC_WINDOW_BUTTON_RADIUS } from "./shared/window-chrome";
 import { finishUpdateQuit } from "./main/update-quit";
@@ -1568,6 +1570,7 @@ function establishBrowserRuntimeLink(): void {
 	browserRuntimeLink = connectBrowserRuntime(address, {
 		token,
 		execute: (command, signal) => {
+ if (command.action === LOCAL_WORKFLOW_CONFIRM_ACTION) return localWorkflowDecisionHost.confirm(command,signal);
 			// A render check or measure uses its own hidden offscreen window,
 			// never the main window or the session's Browser panel, so it does
 			// not need (or disturb) the view host.
@@ -2277,6 +2280,27 @@ registerCliLinkIpc({
 	appVersion: app.getVersion(),
 	shellPath: () => cachedShellEnv?.PATH ?? process.env.PATH,
 });
+
+const trustedDecisionOwner = (owner: WebContents): boolean => {
+ if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || owner.isDestroyed() || trustedShellWebContents.get(owner.id) !== owner || owner !== getShellWebContents()) return false;
+ try { const current=new URL(owner.getURL()); const expected=new URL(rendererUrl()); return current.origin===expected.origin && current.pathname===expected.pathname; } catch { return false; }
+};
+const localWorkflowDecisionHost=createLocalWorkflowDecisionHost({
+ isTrustedOwner: trustedDecisionOwner,
+ showDialog: (_owner,options) => { if (!mainWindow || mainWindow.isDestroyed()) throw new Error("Desktop window is unavailable."); return dialog.showMessageBox(mainWindow,options); },
+ requestDecision: async (input,signal) => {
+  const status=await refreshDaemonStatus();
+  if (status.state!=="ready" || !status.port) throw new Error("Local daemon is unavailable.");
+  const generation=daemonAttachmentGeneration;
+  const { sessionId,...body }=input;
+  const response=await net.fetch(`http://127.0.0.1:${status.port}/api/v1/sessions/${encodeURIComponent(sessionId)}/local-workflow/decision`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});
+  const data=await response.json() as Record<string,unknown>;
+  if (!response.ok) throw Object.assign(new Error(typeof data.message==="string" ? data.message : "Local workflow decision failed."),{code:data.code});
+  if (generation!==daemonAttachmentGeneration) throw new Error("Daemon changed during the decision. Refresh workflow history before retrying.");
+ },
+});
+registerLocalWorkflowDecisionIpc(ipcMain,localWorkflowDecisionHost,trustedDecisionOwner);
+app.once("will-quit",()=>localWorkflowDecisionHost.dispose());
 
 ipcMain.handle("daemon:getStatus", () => refreshDaemonStatus());
 ipcMain.handle("daemon:start", () => startDaemon());

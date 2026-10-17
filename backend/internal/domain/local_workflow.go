@@ -41,6 +41,28 @@ type LocalWorkflowRun struct {
 // LocalWorkflowPhase identifies the durable execution checkpoint of a local workflow.
 type LocalWorkflowPhase string
 
+// LocalWorkflowDecision is an immutable, evidence-bound desktop user decision.
+// Current acceptance is derived separately; old decisions remain in history.
+type LocalWorkflowDecision struct {
+	ID              string    `json:"id"`
+	WorkflowID      string    `json:"workflowId"`
+	RequestID       string    `json:"requestId"`
+	Kind            string    `json:"kind" enum:"accepted,changes_requested"`
+	Comment         string    `json:"comment"`
+	Source          string    `json:"source" enum:"desktop_user"`
+	Cycle           int       `json:"cycle"`
+	ExpectedVersion int64     `json:"expectedVersion"`
+	SnapshotID      string    `json:"snapshotId"`
+	TestOperationID string    `json:"testOperationId"`
+	ReviewRunID     string    `json:"reviewRunId"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+// SameRequest compares immutable inputs without a newly generated ID or clock.
+func (d LocalWorkflowDecision) SameRequest(other LocalWorkflowDecision) bool {
+	return d.WorkflowID == other.WorkflowID && d.RequestID == other.RequestID && d.Kind == other.Kind && d.Comment == other.Comment && d.Source == other.Source && d.Cycle == other.Cycle && d.ExpectedVersion == other.ExpectedVersion && d.SnapshotID == other.SnapshotID && d.TestOperationID == other.TestOperationID && d.ReviewRunID == other.ReviewRunID
+}
+
 // Local workflow execution phases are durable checkpoints, not session display states.
 const (
 	WorkflowWaiting   LocalWorkflowPhase = "waiting_executor"

@@ -3479,7 +3479,9 @@ type SideLabelRequest struct {
 // LocalWorkflowResponse exposes workflow facts without execution environment or absolute paths.
 // absolute log/workspace paths are excluded by the domain JSON boundary.
 type LocalWorkflowResponse struct {
-	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance"`
+	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance,accepted"`
+	Decisions        []domain.LocalWorkflowDecision   `json:"decisions"`
+	Accepted         bool                             `json:"accepted"`
 	Reviews          []domain.ReviewRun               `json:"reviews"`
 	Run              *domain.LocalWorkflowRun         `json:"run"`
 	Operations       []domain.LocalWorkflowOperation  `json:"operations"`
@@ -3491,6 +3493,20 @@ type LocalWorkflowResponse struct {
 // StartLocalWorkflowRequest carries a stable client request identity for idempotent start.
 type StartLocalWorkflowRequest struct {
 	RequestID string `json:"requestId"`
+}
+
+// DecideLocalWorkflowRequest asks the desktop to confirm exact evidence. IntentID
+// is issued only in Electron main memory; callers cannot declare their own role.
+type DecideLocalWorkflowRequest struct {
+	RequestID       string `json:"requestId"`
+	IntentID        string `json:"intentId"`
+	WorkflowID      string `json:"workflowId"`
+	ExpectedVersion int64  `json:"expectedVersion"`
+	Kind            string `json:"kind" enum:"accepted,changes_requested"`
+	Comment         string `json:"comment"`
+	SnapshotID      string `json:"snapshotId"`
+	TestOperationID string `json:"testOperationId"`
+	ReviewRunID     string `json:"reviewRunId"`
 }
 
 // StopLocalWorkflowRequest fences a stop request against the observed workflow version.
