@@ -178,6 +178,15 @@ func (m *Manager) writeInput(terminalID string, a *attachment, raw []byte, relea
 		release()
 		return
 	}
+	m.inputLeaseMu.RLock()
+	writer, _ := m.inputLease.(sessionguard.InputWriter)
+	m.inputLeaseMu.RUnlock()
+	if writer != nil {
+		if err := writer.BeginSessionInput(m.ctx, domain.SessionID(terminalID)); err != nil {
+			release()
+			return
+		}
+	}
 	m.lastInputAt[terminalID] = time.Now()
 	_ = a.writeLeased(raw, release)
 }

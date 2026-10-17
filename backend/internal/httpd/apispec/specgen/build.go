@@ -155,6 +155,14 @@ func schemaName(_ reflect.Type, defaultName string) string {
 // by projectOperations(). Add an entry when a new contract type is introduced;
 // the drift test fails until the spec is regenerated, which flags the gap.
 var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names include reset-credit contracts; no credential value is stored here.
+	"DomainLocalWorkflowRun":                               "LocalWorkflowRun",
+	"DomainLocalWorkflowOperation":                         "LocalWorkflowOperation",
+	"DomainLocalWorkflowTestResult":                        "LocalWorkflowTestResult",
+	"ControllersLocalWorkflowResponse":                     "LocalWorkflowResponse",
+	"ControllersStartLocalWorkflowRequest":                 "StartLocalWorkflowRequest",
+	"ControllersStopLocalWorkflowRequest":                  "StopLocalWorkflowRequest",
+	"ControllersResumeLocalWorkflowRequest":                "ResumeLocalWorkflowRequest",
+	"ControllersLocalWorkflowTestLogResponse":              "LocalWorkflowTestLogResponse",
 	"DomainLocalReviewResult":                              "LocalReviewResult",
 	"DomainLocalReviewFinding":                             "LocalReviewFinding",
 	"DomainHarnessDefault":                                 "HarnessDefault",
@@ -669,6 +677,7 @@ func operations() []operation {
 	ops = append(ops, automationOperations()...)
 	ops = append(ops, prOperations()...)
 	ops = append(ops, reviewOperations()...)
+	ops = append(ops, localWorkflowOperations()...)
 	ops = append(ops, notificationOperations()...)
 	ops = append(ops, reportOperations()...)
 	ops = append(ops, usageOperations()...)
@@ -3382,4 +3391,20 @@ func prOperations() []operation {
 			resps:   []respUnit{{http.StatusOK, map[string]any{"repos": []githubpat.Repo{}}}, {http.StatusUnauthorized, envelope.APIError{}}, {http.StatusInternalServerError, envelope.APIError{}}},
 		},
 	}
+}
+
+func localWorkflowOperations() []operation {
+	base := "/api/v1/sessions/{sessionId}/local-workflow"
+	errorResponses := []respUnit{{http.StatusBadRequest, envelope.APIError{}}, {http.StatusNotFound, envelope.APIError{}}, {http.StatusConflict, envelope.APIError{}}, {http.StatusUnprocessableEntity, envelope.APIError{}}, {http.StatusInternalServerError, envelope.APIError{}}, {http.StatusNotImplemented, envelope.APIError{}}}
+	operations := []operation{
+		{method: http.MethodGet, path: base, id: "getLocalWorkflow", summary: "Read local workflow execution facts", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
+		{method: http.MethodPost, path: base + "/start", id: "startLocalWorkflow", summary: "Start an explicit local workflow", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StartLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
+		{method: http.MethodPost, path: base + "/stop", id: "stopLocalWorkflow", summary: "Stop local workflow execution", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StopLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
+		{method: http.MethodPost, path: base + "/resume", id: "resumeLocalWorkflow", summary: "Explicitly resume local workflow execution", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.ResumeLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
+		{method: http.MethodGet, path: base + "/tests/{testId}/logs", id: "getLocalWorkflowTestLog", summary: "Read bounded stdout or stderr for a workflow test", tag: "reviews", pathParams: []any{controllers.LocalWorkflowTestLogParams{}}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowTestLogResponse{}}}},
+	}
+	for i := range operations {
+		operations[i].resps = append(operations[i].resps, errorResponses...)
+	}
+	return operations
 }

@@ -839,6 +839,13 @@ func Run() error {
 		}
 		return fmt.Errorf("reconcile sessions on boot: %w", reconcileErr)
 	}
+	localWorkflowSvc, workflowErr := startLocalWorkflow(ctx, store, sessMgr, chatSvc, reviewSvc, cfg.DataDir, log)
+	if workflowErr != nil {
+		stop()
+		lcStack.Stop()
+		_ = cdcPipe.Stop()
+		return fmt.Errorf("recover local workflows: %w", workflowErr)
+	}
 	agentSvc.WarmCodexAccounts()
 	automationSvc, automationDone := startAutomations(ctx, store, sessionSvc, log)
 	lcStack.automationDone = automationDone
@@ -950,6 +957,7 @@ func Run() error {
 		DesktopWorkspaces:  sessionSvc,
 		PRs:                prActions,
 		Reviews:            reviewSvc,
+		LocalWorkflow:      localWorkflowSvc,
 		Notifications:      notifier,
 		Reports:            reportSvc,
 		NotificationStream: notificationHub,

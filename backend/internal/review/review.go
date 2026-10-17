@@ -259,6 +259,10 @@ type RestoreReviewerResult struct {
 // TriggerOptions selects the reviewer, its surface, and the same-commit policy
 // for one trigger.
 type TriggerOptions struct {
+	// Internal workflow provenance is never accepted from a public trigger DTO.
+	WorkflowOperationID string
+	ExpectedSnapshotID  string
+	WorkflowRun         *domain.LocalWorkflowRun
 	// Harness and Config override the resolved reviewer for this pass only.
 	Harness domain.ReviewerHarness
 	Config  domain.AgentConfig
@@ -294,7 +298,7 @@ func (e *Engine) TriggerWithOptions(ctx stdctx.Context, workerID domain.SessionI
 	if source == "" {
 		source = domain.ReviewTriggerManual
 	}
-	if (opts.Rerun || opts.RejectReviewedHead) && source == domain.ReviewTriggerAuto {
+	if (opts.Rerun || opts.RejectReviewedHead) && source == domain.ReviewTriggerAuto && opts.WorkflowOperationID == "" {
 		return TriggerResult{}, fmt.Errorf("%w: automatic review cannot request a rerun or same-commit rejection", ErrInvalid)
 	}
 	if workerID == "" {
@@ -332,7 +336,7 @@ func (e *Engine) TriggerWithOptions(ctx stdctx.Context, workerID domain.SessionI
 	if !ok {
 		return TriggerResult{}, fmt.Errorf("%w: worker session %q", ErrNotFound, workerID)
 	}
-	if source == domain.ReviewTriggerAuto {
+	if source == domain.ReviewTriggerAuto && opts.WorkflowOperationID == "" {
 		if reason := autoReviewSessionReason(worker, e.clock()); reason != "" {
 			return TriggerResult{SkipReason: reason}, nil
 		}
@@ -342,6 +346,12 @@ func (e *Engine) TriggerWithOptions(ctx stdctx.Context, workerID domain.SessionI
 	}
 	if worker.Metadata.WorkspacePath == "" {
 		return TriggerResult{}, fmt.Errorf("%w: worker session %q has no workspace to review", ErrInvalid, workerID)
+	}
+	if opts.WorkflowRun != nil {
+		cfg := domain.ProjectConfig{ReviewMode: domain.ReviewTargetLocal, Env: opts.WorkflowRun.Env}
+		worker.Metadata.Prompt = opts.WorkflowRun.Task
+		worker.Metadata.LatestUserPrompt = opts.WorkflowRun.LatestUserPrompt
+		return e.triggerLocalLocked(ctx, worker, cfg, opts)
 	}
 	if cfg, err := e.reviewProjectConfig(ctx, worker.ProjectID); err != nil {
 		return TriggerResult{}, err

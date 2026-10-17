@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/sessionguard"
+	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite/sqlitetest"
 )
 
 func newInputLeaseTestManager() *Manager {
@@ -188,4 +190,106 @@ func eventuallySessionInput(t *testing.T, timeout time.Duration, fn func() bool)
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("condition was not met before timeout")
+}
+
+type workflowInputStore struct {
+	Store
+	state   domain.ActivityState
+	blocked bool
+	editing bool
+}
+
+func (s *workflowInputStore) AcquireLocalReviewWorkspace(context.Context, domain.SessionID) (func(), error) {
+	return func() {}, nil
+}
+func (s *workflowInputStore) BeginLocalReviewEditing(context.Context, domain.SessionID) error {
+	s.editing = true
+	return nil
+}
+func (s *workflowInputStore) HasPendingLocalReviewWork(context.Context, domain.SessionID) (bool, error) {
+	return false, nil
+}
+func (s *workflowInputStore) CheckLocalWorkflowWorkerAdmission(context.Context, domain.SessionID) error {
+	if s.blocked {
+		return domain.ErrLocalWorkflowConflict
+	}
+	return nil
+}
+func TestWorkflowVerificationBlocksDirectTerminalInput(t *testing.T) {
+	m := newInputLeaseTestManager()
+	store := &workflowInputStore{blocked: true}
+	m.store = store
+	release, ok := m.AcquireSessionInput("worker")
+	if ok {
+		release()
+		t.Fatal("terminal input admitted during verification")
+	}
+	store.blocked = false
+	release, ok = m.AcquireSessionInput("worker")
+	if !ok {
+		t.Fatal("terminal input not restored")
+	}
+	release()
+	if store.editing {
+		t.Fatal("lease acquisition mutated activity before safety checks")
+	}
+}
+
+func (s *workflowInputStore) GetSession(context.Context, domain.SessionID) (domain.SessionRecord, bool, error) {
+	state := s.state
+	if s.editing {
+		state = domain.ActivityActive
+	}
+	return domain.SessionRecord{ID: "worker", Activity: domain.Activity{State: state}}, true, nil
+}
+
+type guardedInputMessenger struct{ sends int }
+
+func (m *guardedInputMessenger) Send(context.Context, domain.SessionID, string) error {
+	m.sends++
+	return nil
+}
+func TestWorkflowInputLeasePreservesNudgeSafetyChecks(t *testing.T) {
+	for _, state := range []domain.ActivityState{domain.ActivityBlocked, domain.ActivityWaitingInput, domain.ActivityExited} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx := context.Background()
+			store := sqlitetest.MustOpen(t)
+			if err := store.UpsertProject(ctx, domain.ProjectRecord{ID: "input", Path: t.TempDir(), Config: domain.ProjectConfig{ReviewMode: domain.ReviewTargetLocal}, RegisteredAt: time.Now()}); err != nil {
+				t.Fatal(err)
+			}
+			rec, err := store.CreateSession(ctx, domain.SessionRecord{ProjectID: "input", Kind: domain.KindWorker, Mode: domain.SessionModeTUI, Harness: domain.HarnessCodex, Activity: domain.Activity{State: state}, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := newInputLeaseTestManager()
+			m.store = store
+			messenger := &guardedInputMessenger{}
+			guard := sessionguard.New(store, messenger, nil)
+			guard.SetInputLease(m)
+			outcome, err := guard.Nudge(ctx, rec.ID, "continue")
+			if err != nil {
+				t.Fatal(err)
+			}
+			after, found, err := store.GetSession(ctx, rec.ID)
+			if err != nil || !found {
+				t.Fatalf("session read: %v", err)
+			}
+			if outcome == sessionguard.Sent || messenger.sends != 0 || after.Activity.State != state {
+				t.Fatalf("unsafe nudge: outcome=%s writes=%d state=%s", outcome, messenger.sends, after.Activity.State)
+			}
+		})
+	}
+}
+
+func TestWorkflowGuardMarksEditingOnlyForAcceptedWrite(t *testing.T) {
+	m := newInputLeaseTestManager()
+	store := &workflowInputStore{state: domain.ActivityIdle}
+	m.store = store
+	messenger := &guardedInputMessenger{}
+	guard := sessionguard.New(store, messenger, nil)
+	guard.SetInputLease(m)
+	outcome, err := guard.Nudge(context.Background(), "worker", "continue")
+	if err != nil || outcome != sessionguard.Sent || messenger.sends != 1 || !store.editing {
+		t.Fatalf("accepted write did not invalidate verification: %s, %v, writes=%d editing=%v", outcome, err, messenger.sends, store.editing)
+	}
 }

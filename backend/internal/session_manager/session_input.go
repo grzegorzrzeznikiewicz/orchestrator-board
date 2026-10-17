@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	"github.com/aoagents/agent-orchestrator/backend/internal/sessionguard"
 )
 
@@ -35,9 +36,28 @@ var _ sessionguard.InputLease = (*Manager)(nil)
 // close admission and wait for every already-admitted write to finish.
 func (m *Manager) AcquireSessionInput(id domain.SessionID) (release func(), ok bool) {
 	id = domain.SessionID(strings.TrimSpace(string(id)))
+	releaseWorkspace := func() {}
+	if admission, available := m.store.(ports.LocalReviewWorkspace); available {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		release, err := admission.AcquireLocalReviewWorkspace(ctx, id)
+		if err != nil {
+			return nil, false
+		}
+		releaseWorkspace = release
+		if checker, ok := m.store.(interface {
+			CheckLocalWorkflowWorkerAdmission(context.Context, domain.SessionID) error
+		}); ok {
+			if err := checker.CheckLocalWorkflowWorkerAdmission(ctx, id); err != nil {
+				release()
+				return nil, false
+			}
+		}
+	}
 	m.agentOpMu.Lock()
 	if m.agentOperationActiveLocked(id) && !m.agentSwitchDecisionInputAllowedLocked(id) {
 		m.agentOpMu.Unlock()
+		releaseWorkspace()
 		return nil, false
 	}
 	if m.inputLeases[id] == 0 {
@@ -48,7 +68,7 @@ func (m *Manager) AcquireSessionInput(id domain.SessionID) (release func(), ok b
 
 	var once sync.Once
 	return func() {
-		once.Do(func() { m.releaseSessionInput(id) })
+		once.Do(func() { m.releaseSessionInput(id); releaseWorkspace() })
 	}, true
 }
 
@@ -383,4 +403,13 @@ func (m *Manager) beginAgentResume(ctx context.Context, id domain.SessionID) err
 
 func (m *Manager) endAgentResume(id domain.SessionID) {
 	m.endAgentOperation(id, agentOperationResume)
+}
+
+// BeginSessionInput invalidates local verification immediately before an admitted
+// pane write, after the caller has checked liveness and permission state.
+func (m *Manager) BeginSessionInput(ctx context.Context, id domain.SessionID) error {
+	if admission, ok := m.store.(ports.LocalReviewWorkspace); ok {
+		return admission.BeginLocalReviewEditing(ctx, id)
+	}
+	return nil
 }

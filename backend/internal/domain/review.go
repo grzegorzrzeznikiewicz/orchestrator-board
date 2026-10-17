@@ -67,6 +67,7 @@ type ReviewerSurface struct {
 
 // ReviewRun is one review pass against a worker's PR.
 type ReviewRun struct {
+	WorkflowOperationID string             `json:"-"`
 	Round               int                `json:"round,omitempty"`
 	LocalResult         *LocalReviewResult `json:"localResult,omitempty"`
 	TargetKind          ReviewTargetKind   `json:"targetKind,omitempty" enum:"pr,local"`

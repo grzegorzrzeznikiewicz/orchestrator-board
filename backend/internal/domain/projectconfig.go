@@ -22,6 +22,8 @@ type ProjectConfig struct {
 	ReviewMode ReviewTargetKind `json:"reviewMode,omitempty" enum:"pr,local"`
 	// TestCommands is the ordered project test plan used by the local workflow.
 	TestCommands []string `json:"testCommands,omitempty"`
+	// LocalWorkflowMaxRounds bounds automatic test/review cycles; zero means 3.
+	LocalWorkflowMaxRounds int `json:"localWorkflowMaxRounds,omitempty"`
 	// CanonicalRepoURL explicitly trusts one upstream repository for PR claims.
 	// Numeric PR references use this repository when set; checkout/push stays on origin.
 	CanonicalRepoURL string `json:"canonicalRepoURL,omitempty"`
@@ -223,6 +225,9 @@ func (c ProjectConfig) IsZero() bool {
 // Validate rejects values outside the typed vocabulary so a bad config is
 // refused when it is set (CLI/API) rather than surfacing at spawn.
 func (c ProjectConfig) Validate() error {
+	if c.LocalWorkflowMaxRounds < 0 {
+		return fmt.Errorf("localWorkflowMaxRounds must be non-negative (zero uses the default of 3)")
+	}
 	if c.ReviewMode != "" && c.ReviewMode != ReviewTargetPR && c.ReviewMode != ReviewTargetLocal {
 		return fmt.Errorf("unknown review mode %q", c.ReviewMode)
 	}

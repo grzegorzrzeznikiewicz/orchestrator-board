@@ -34,6 +34,11 @@ type InputLease interface {
 	AcquireSessionInput(id domain.SessionID) (release func(), ok bool)
 }
 
+// InputWriter marks editing only after safety checks, while InputLease is held.
+type InputWriter interface {
+	BeginSessionInput(context.Context, domain.SessionID) error
+}
+
 // Outcome reports what a guarded write did. Anything other than Sent means the
 // message did NOT reach the pane; callers that record delivery must not stamp
 // a suppressed write as delivered.
@@ -373,7 +378,12 @@ func (g *Guard) sendThen(ctx context.Context, id domain.SessionID, msg string, r
 		}
 		defer release()
 	}
-	outcome, err := g.sendAdmitted(ctx, id, msg, refuse)
+	outcome, err := g.sendAdmittedChecked(ctx, id, msg, refuse, func(ctx context.Context, _ domain.SessionRecord) error {
+		if writer, ok := lease.(InputWriter); ok {
+			return writer.BeginSessionInput(ctx, id)
+		}
+		return nil
+	})
 	if err == nil && outcome == Sent && after != nil {
 		if afterErr := after(ctx); afterErr != nil {
 			return outcome, afterErr
@@ -414,6 +424,7 @@ func (g *Guard) sendAdmittedChecked(ctx context.Context, id domain.SessionID, ms
 			return SuppressedUnknown, fmt.Errorf("guard %s: pre-write check: %w", id, err)
 		}
 	}
+
 	if err := g.messenger.Send(ctx, id, msg); err != nil {
 		return Sent, fmt.Errorf("guard %s: send: %w", id, err)
 	}

@@ -3475,3 +3475,42 @@ type SideChatLaunchState struct {
 type SideLabelRequest struct {
 	Label string `json:"label"`
 }
+
+// LocalWorkflowResponse exposes workflow facts without execution environment or absolute paths.
+// absolute log/workspace paths are excluded by the domain JSON boundary.
+type LocalWorkflowResponse struct {
+	Run              *domain.LocalWorkflowRun         `json:"run"`
+	Operations       []domain.LocalWorkflowOperation  `json:"operations"`
+	Tests            []domain.LocalWorkflowTestResult `json:"tests"`
+	Current          bool                             `json:"current"`
+	RequiredFindings []domain.LocalReviewFinding      `json:"requiredFindings"`
+}
+
+// StartLocalWorkflowRequest carries a stable client request identity for idempotent start.
+type StartLocalWorkflowRequest struct {
+	RequestID string `json:"requestId"`
+}
+
+// StopLocalWorkflowRequest fences a stop request against the observed workflow version.
+type StopLocalWorkflowRequest struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
+}
+
+// ResumeLocalWorkflowRequest requests deliberate continuation and an optional greater round limit.
+type ResumeLocalWorkflowRequest struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
+	MaxRounds       *int  `json:"maxRounds,omitempty"`
+}
+
+// LocalWorkflowTestLogResponse contains a bounded log read and its truncation indicator.
+type LocalWorkflowTestLogResponse struct {
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated"`
+}
+
+// LocalWorkflowTestLogParams binds a log read to its owning session, test and stream.
+type LocalWorkflowTestLogParams struct {
+	SessionID string `path:"sessionId"`
+	TestID    string `path:"testId"`
+	Stream    string `query:"stream" enum:"stdout,stderr"`
+}

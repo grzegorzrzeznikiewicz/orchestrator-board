@@ -13,6 +13,7 @@ import { Button } from "./ui/button";
 export type ProjectSettingsDraft = {
 	reviewMode?: "pr" | "local";
 	testCommands?: string;
+ localWorkflowMaxRounds?: number;
 	displayName: string;
 	defaultBranch: string;
 	sessionPrefix: string;
@@ -197,7 +198,10 @@ export function ProjectSettingsEditor({ initialValues, section, capabilities, de
 							<ProjectSettingsRow label={t("settings.project.testCommands")}>
 								<textarea aria-label={t("settings.project.testCommands")} className="min-h-20 w-full max-w-sm rounded-md border border-input bg-background p-2 font-mono text-xs" value={draft.testCommands ?? ""} onChange={(event) => patch({ testCommands: event.target.value })} />
 							</ProjectSettingsRow>
-							<p className="px-3 py-2 text-xs text-settings-muted">{t("settings.project.localReviewDescription")}</p>
+							<ProjectSettingsRow label={t("settings.project.localWorkflowMaxRounds")}>
+ <input aria-label={t("settings.project.localWorkflowMaxRounds")} type="number" min={1} step={1} value={draft.localWorkflowMaxRounds??3} className="w-24 rounded-md border border-input bg-background p-2 text-sm" onChange={event=>{const value=event.target.valueAsNumber;if(Number.isInteger(value)&&value>0)patch({localWorkflowMaxRounds:value})}} />
+ </ProjectSettingsRow>
+ <p className="px-3 py-2 text-xs text-settings-muted">{t("settings.project.localReviewDescription")}</p>
 						</>}
 					</ProjectSettingsSection>}
 					{draft.reviewMode !== "local" && <ProjectSettingsSection title={t("settings.project.pullRequests")} grouped>

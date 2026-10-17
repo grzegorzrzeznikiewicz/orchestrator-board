@@ -142,6 +142,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 			};
 			const refreshRemote = (hostId: string, reconnect = false) => {
 				invalidate(["remote-workspaces", hostId]);
+				invalidate(["remote-local-workflow",hostId]);
 				invalidate(["project", hostId]);
 				invalidate(["project-config", hostId]);
 				if (reconnect) invalidate(["remote-conversation", hostId]);
@@ -232,6 +233,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 				}
 				if (workspaceInvalidationPending) {
 					invalidate(workspaceQueryKey);
+					invalidate(["local-workflow"]);
 					invalidate(agentSwitchesQueryRoot);
 					invalidate(sessionScmSummaryQueryKey());
 					invalidate(sessionUsageQueryRoot);
