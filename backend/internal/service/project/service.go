@@ -150,6 +150,7 @@ func (m *Service) List(ctx context.Context) ([]Summary, error) {
 			folderMissing = !exists
 		}
 		out = append(out, Summary{
+			ReviewMode:        row.Config.EffectiveReviewMode(),
 			ID:                domain.ProjectID(row.ID),
 			Name:              projectDisplayName(row),
 			Path:              row.Path,

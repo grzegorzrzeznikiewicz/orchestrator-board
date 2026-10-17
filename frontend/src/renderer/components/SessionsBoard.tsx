@@ -1,3 +1,4 @@
+import { LocalWorkflowBoard } from "./LocalWorkflowBoard";
 import { OrchestratorStartingChat } from "./chat/OrchestratorStartingChat";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,7 +46,7 @@ import { useProjectOrchestratorAction } from "../hooks/useProjectOrchestratorAct
 import { openRemoteOrchestrator } from "../lib/remote-orchestrator";
 import { labelForHost } from "../lib/host-clients";
 import { useConnectedHosts } from "../hooks/useHostConnection";
-import { LOCAL_HOST, refKey } from "../lib/hosts";
+import { LOCAL_HOST, refKey, sessionUiKey } from "../lib/hosts";
 import { useShellMaybe } from "../lib/shell-context";
 import { sessionNavigateTarget } from "../lib/navigate-to-session";
 import { ProjectTerminationFeedback } from "./ShellTopbar";
@@ -132,6 +133,9 @@ export function SessionsBoard({ projectId, hostId }: SessionsBoardProps) {
 			? { ...session, kanbanColumn: "building" as const }
 			: session,
 	);
+	const localProjectIds = new Set(workspaces.filter(w => w.reviewMode === "local").map(w => w.id));
+	const localBoardSessions = activeSessions.filter(s => localProjectIds.has(s.workspaceId) && !s.cloud);
+	const prBoardSessions = boardSessions.filter(s => !localProjectIds.has(s.workspaceId) || s.cloud);
 	const boardLabels = sessionsBoardLabels(t);
 	const presentation = useBoardPresentation({
 		projectId,
@@ -309,22 +313,54 @@ export function SessionsBoard({ projectId, hostId }: SessionsBoardProps) {
 				) : showProjectEmpty ? (
 					<ProjectBoardEmpty actions={<ProjectBoardActions actions={projectActions} placement="empty" />} />
 				) : (
-					<SessionsBoardGridView
-						columns={columns}
-						key={scopeKey}
-						labels={boardLabels}
-						renderSessionCard={(session) => (
-							<BoardSessionCardAdapter
-								memory={memoryBySession?.get(session.id)}
-								memoryTone={chipToneOf(session)}
-								onOpen={() => openSession(session)}
-								onOpenArtifact={(path) => openSessionArtifact(session, path)}
-								onTerminate={!hostId || connected ? ({ deleteArtifacts }) => terminateSession.mutate({ ...session, deleteArtifacts }) : undefined}
-								session={session}
+					<div className={cn("flex h-full min-h-0 flex-col gap-3", localBoardSessions.length > 0 && prBoardSessions.length > 0 && "overflow-y-auto")}>
+						{(localBoardSessions.length > 0 || workspace?.reviewMode === "local") && (
+							<LocalWorkflowBoard
+								hostId={hostId}
+								sessions={localBoardSessions}
+								renderSessionCard={(session, details) => (
+									<BoardSessionCardAdapter
+										session={session}
+										footer={details}
+										localWorkflow
+										memory={memoryBySession?.get(session.id)}
+										memoryTone={chipToneOf(session)}
+										onOpen={() => {
+											const key = sessionUiKey(session.id, hostId);
+											useUiStore.getState().initializeInspectorSession(key, Boolean(session.previewUrl), true);
+											useUiStore.getState().setInspectorOpen(key, true);
+											useUiStore.getState().setInspectorView(key, "reviews");
+											openSession(session);
+										}}
+										onTerminate={!hostId || connected ? ({ deleteArtifacts }) => terminateSession.mutate({ ...session, deleteArtifacts }) : undefined}
+									/>
+								)}
 							/>
 						)}
-						sessions={boardSessions}
-					/>
+						{(prBoardSessions.length > 0 || (!localBoardSessions.length && workspace?.reviewMode !== "local")) && (
+							<div className="flex min-h-80 flex-1 flex-col overflow-hidden">
+								{localBoardSessions.length > 0 && <h2 className="shrink-0 px-4 py-2 text-xs font-medium">{t("localWorkflow.prBoard")}</h2>}
+								<div className="min-h-0 flex-1">
+									<SessionsBoardGridView
+										columns={columns}
+										key={scopeKey}
+										labels={boardLabels}
+										renderSessionCard={(session) => (
+											<BoardSessionCardAdapter
+												memory={memoryBySession?.get(session.id)}
+												memoryTone={chipToneOf(session)}
+												onOpen={() => openSession(session)}
+												onOpenArtifact={(path) => openSessionArtifact(session, path)}
+												onTerminate={!hostId || connected ? ({ deleteArtifacts }) => terminateSession.mutate({ ...session, deleteArtifacts }) : undefined}
+												session={session}
+											/>
+										)}
+										sessions={prBoardSessions}
+									/>
+								</div>
+							</div>
+						)}
+					</div>
 				)}
 			</div>
 

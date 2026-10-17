@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { LocalWorkflowHistory } from "./LocalWorkflowHistory";
+import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocalWorkflow } from "../hooks/use-local-workflow";
@@ -16,30 +19,47 @@ export function LocalWorkflowPanel({
   const data = query.data;
   const run = data?.run;
   const [limit, setLimit] = useState(3);
-  const [output, setOutput] = useState<{
-    text: string;
-    truncated: boolean;
+  const [selectedLog, setSelectedLog] = useState<{
+    sessionId: string;
+    hostId?: string;
+    testId: string;
+    command: string;
+    stream: "stdout" | "stderr";
   } | null>(null);
-  const [logError, setLogError] = useState<Error | null>(null);
+  const log =
+    selectedLog?.sessionId === sessionId && selectedLog.hostId === hostId
+      ? selectedLog
+      : null;
+  const logQuery = useQuery({
+    queryKey: [
+      "local-workflow-log",
+      hostId ?? "local",
+      sessionId,
+      log?.testId,
+      log?.stream,
+    ],
+    enabled: !!log,
+    queryFn: () =>
+      getLocalWorkflowTestLog(sessionId, log!.testId, log!.stream, hostId),
+  });
+  const output = log ? logQuery.data : undefined;
   useEffect(() => {
     setLimit(run?.maxRounds ?? 3);
   }, [run?.id, run?.blockCode, run?.maxRounds]);
-  useEffect(() => {
-    setOutput(null);
-    setLogError(null);
-  }, [sessionId, hostId]);
-  const error = action.error ?? logError ?? query.error;
+  const error = action.error ?? (log ? logQuery.error : null) ?? query.error;
   const canResume = !!run && ["blocked", "stopped"].includes(run.phase);
   const limited = run?.blockCode === "round_limit";
-  async function showLog(testId: string, stream: "stdout" | "stderr") {
-    try {
-      setLogError(null);
-      setOutput(
-        await getLocalWorkflowTestLog(sessionId, testId, stream, hostId),
-      );
-    } catch (e) {
-      setLogError(e instanceof Error ? e : new Error(String(e)));
-    }
+  function showLog(
+    test: NonNullable<LocalWorkflowSnapshot["tests"]>[number],
+    stream: "stdout" | "stderr",
+  ) {
+    setSelectedLog({
+      sessionId,
+      hostId,
+      testId: test.id,
+      command: test.command,
+      stream,
+    });
   }
   return (
     <section
@@ -71,6 +91,9 @@ export function LocalWorkflowPanel({
               limit: run.maxRounds,
             })}
           </p>
+          {run.blockCode && (
+            <code className="break-all text-warning">{run.blockCode}</code>
+          )}
           {run.blockMessage && (
             <p className="text-warning">{run.blockMessage}</p>
           )}
@@ -142,31 +165,16 @@ export function LocalWorkflowPanel({
               ))}
             </ul>
           )}
-          <ul className="space-y-2">
-            {data?.tests?.map((test) => (
-              <li key={test.id} className="rounded border border-border p-2">
-                <code>{test.command}</code>
-                <p>
-                  {t(`localWorkflow.test.${test.status}`)}
-                  {test.exitCode != null ? ` (${test.exitCode})` : ""}
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    className="underline"
-                    onClick={() => void showLog(test.id, "stdout")}
-                  >
-                    {t("localWorkflow.stdout")}
-                  </button>
-                  <button
-                    className="underline"
-                    onClick={() => void showLog(test.id, "stderr")}
-                  >
-                    {t("localWorkflow.stderr")}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {data && <LocalWorkflowHistory data={data} onShowLog={showLog} />}
+          {log && (
+            <p>
+              {t("localWorkflow.logTitle", {
+                command: log.command,
+                stream: log.stream,
+              })}
+            </p>
+          )}
+          {log && logQuery.isFetching && <p>{t("localWorkflow.loading")}</p>}
           {output && (
             <div>
               {output.truncated && <p>{t("localWorkflow.truncated")}</p>}

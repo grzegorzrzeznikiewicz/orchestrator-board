@@ -95,6 +95,8 @@ export function sessionsBoardLabels(t: TFunction): BoardColumnLabels {
 }
 
 export function BoardSessionCardAdapter({
+	footer,
+	localWorkflow,
 	memory,
 	memoryTone,
 	onOpen,
@@ -102,6 +104,8 @@ export function BoardSessionCardAdapter({
 	onTerminate,
 	session,
 }: {
+	footer?: ReactNode;
+	localWorkflow?: boolean;
 	/** Live reading of the session's process tree, for the card's resource chip. */
 	memory?: SessionMemoryReading;
 	/** Colour for the chip; neutral unless this card is part of the fix. */
@@ -114,6 +118,8 @@ export function BoardSessionCardAdapter({
 }) {
 	return (
 		<DesktopSessionCard
+			footer={footer}
+			localWorkflow={localWorkflow}
 			memory={memory}
 			memoryTone={memoryTone}
 			onOpen={onOpen}
@@ -174,6 +180,7 @@ function DesktopSessionCard({
 	footer,
 	hideTerminatedStatus = false,
 	interactive = true,
+	localWorkflow = false,
 	memory,
 	memoryTone,
 	onOpen,
@@ -186,6 +193,7 @@ function DesktopSessionCard({
 	footer?: ReactNode;
 	hideTerminatedStatus?: boolean;
 	interactive?: boolean;
+	localWorkflow?: boolean;
 	memory?: SessionMemoryReading;
 	memoryTone?: ChipTone;
 	onOpen?: () => void;
@@ -302,7 +310,16 @@ function DesktopSessionCard({
 			session={
 				hideTerminatedStatus
 					? hideTerminatedCardStatus(toBoardSessionPresentation(session, t))
-					: toBoardSessionPresentation(session, t)
+					: localWorkflow
+						? {
+								...toBoardSessionPresentation(session, t),
+								statusPresentation: {
+									className: "text-muted-foreground",
+									indicatorClassName: "bg-muted-foreground",
+									label: t("localWorkflow.title"),
+								},
+							}
+						: toBoardSessionPresentation(session, t)
 			}
 			translate={translate}
 		/>

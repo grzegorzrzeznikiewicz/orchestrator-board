@@ -3479,6 +3479,8 @@ type SideLabelRequest struct {
 // LocalWorkflowResponse exposes workflow facts without execution environment or absolute paths.
 // absolute log/workspace paths are excluded by the domain JSON boundary.
 type LocalWorkflowResponse struct {
+	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance"`
+	Reviews          []domain.ReviewRun               `json:"reviews"`
 	Run              *domain.LocalWorkflowRun         `json:"run"`
 	Operations       []domain.LocalWorkflowOperation  `json:"operations"`
 	Tests            []domain.LocalWorkflowTestResult `json:"tests"`

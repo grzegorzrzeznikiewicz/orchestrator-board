@@ -305,6 +305,7 @@ async function fetchWorkspaces(): Promise<WorkspaceSummary[]> {
 			kind,
 			path: project.path,
 			folderMissing: project.folderMissing,
+			reviewMode: project.reviewMode === "local" ? "local" as const : "pr" as const,
 			orchestratorAgent: project.orchestratorAgent ? toAgentProvider(project.orchestratorAgent) : undefined,
 			sessions: sessions
 				.filter((session) => session.projectId === project.id)
@@ -365,6 +366,7 @@ function toRemoteWorkspaces(
 		kind: toProjectKind(project.kind),
 		path: project.path,
 		folderMissing: project.folderMissing,
+		reviewMode: project.reviewMode === "local" ? "local" as const : "pr" as const,
 		orchestratorAgent: project.orchestratorAgent ? toAgentProvider(project.orchestratorAgent) : undefined,
 		sessions: sessions.filter((session) => session.projectId === project.id).map((session) => ({
 			...toWorkspaceSession(session, project),

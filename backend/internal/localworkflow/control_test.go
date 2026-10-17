@@ -78,6 +78,7 @@ func TestWorkflowRestartAndDuplicateEvaluation(t *testing.T) {
 		t.Fatal(e)
 	}
 	restored, e := other.Get(ctx, f.session.ID)
+	assertWorkflowPresentation(t, restored, "local_review", 2)
 	if e != nil || restored.Current || restored.Run.Phase != domain.WorkflowBlocked || len(restored.Tests) != 2 {
 		t.Fatalf("restored=%+v %v", restored, e)
 	}

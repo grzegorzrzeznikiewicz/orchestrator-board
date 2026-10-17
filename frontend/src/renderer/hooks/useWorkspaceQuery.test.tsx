@@ -820,3 +820,25 @@ describe("useWorkspacePolling", () => {
 		}
 	});
 });
+
+it("retains the configured review mode for local board routing", async () => {
+	respondWith({
+		projects: {
+			data: {
+				projects: [
+					{ id: "local", name: "Local", path: "/local", reviewMode: "local" },
+					{ id: "legacy", name: "Legacy", path: "/legacy" },
+				],
+			},
+		},
+		sessions: { data: { sessions: [] } },
+	});
+	const { result } = renderHook(() => useWorkspaceQuery(), { wrapper });
+	await waitFor(() => expect(result.current.isSuccess).toBe(true));
+	expect(result.current.data?.find((w) => w.id === "local")?.reviewMode).toBe(
+		"local",
+	);
+	expect(result.current.data?.find((w) => w.id === "legacy")?.reviewMode).toBe(
+		"pr",
+	);
+});

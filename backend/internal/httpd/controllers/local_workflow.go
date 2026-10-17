@@ -44,7 +44,7 @@ func (c *LocalWorkflowController) available(w http.ResponseWriter, r *http.Reque
 }
 func localWorkflowResponse(w http.ResponseWriter, r *http.Request, result localworkflow.Snapshot, err error) {
 	if err == nil {
-		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{result.Run, result.Operations, result.Tests, result.Current, result.RequiredFindings})
+		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{Run: result.Run, Operations: result.Operations, Tests: result.Tests, Current: result.Current, RequiredFindings: result.RequiredFindings, Stage: result.Stage, Reviews: result.Reviews})
 		return
 	}
 	status := http.StatusInternalServerError
