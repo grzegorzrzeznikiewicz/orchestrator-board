@@ -419,6 +419,12 @@ func TestStopPreservesUncertainTestExecution(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(snap.Operations) > 0 && !f.coordinator.isActive(snap.Operations[0].ID) {
+			// The callback can settle after Get and before isActive. Read its
+			// durable result only after observing callback completion.
+			snap, err = f.coordinator.Get(context.Background(), f.session.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if snap.Operations[0].State != "uncertain" {
 				t.Fatalf("lost execution uncertainty: %+v", snap.Operations[0])
 			}
