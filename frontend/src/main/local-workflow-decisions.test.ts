@@ -90,6 +90,31 @@ function setup(response = 1) {
 }
 
 describe("local workflow desktop decisions", () => {
+	it("retries a committed decision after response loss without another native dialog", async () => {
+		const s = setup();
+		let recordedRequest: string | undefined;
+		const privateIntents: string[] = [];
+		s.requestDecision.mockImplementation(async (body, signal) => {
+			privateIntents.push(body.intentId);
+			if (recordedRequest === body.requestId) return;
+			await s.host.confirm({
+				type: "command", requestId: "broker", sessionId: body.sessionId,
+				action: "__confirm-local-workflow-decision", args: { ...body, cycle: 1 },
+			}, signal);
+			recordedRequest = body.requestId;
+			throw new Error("Response lost after durable decision");
+		});
+		await expect(s.host.request(s.owner, input)).rejects.toThrow("Response lost");
+		await expect(s.host.request(s.owner, { ...input })).resolves.toEqual({ status: "recorded" });
+		expect(recordedRequest).toBe(input.requestId);
+		expect(s.requestDecision).toHaveBeenCalledTimes(2);
+		expect(s.requestDecision.mock.calls.map(([body]) => body.requestId)).toEqual([
+			input.requestId, input.requestId,
+		]);
+		expect(privateIntents).toHaveLength(2);
+		expect(new Set(privateIntents).size).toBe(2);
+		expect(s.dialog).toHaveBeenCalledTimes(1);
+	});
 	it("confirms only an exact private intent and explicit native response", async () => {
 		const s = setup();
 		await expect(

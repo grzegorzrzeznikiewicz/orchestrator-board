@@ -499,4 +499,47 @@ describe("desktop user decision controls", () => {
       screen.getByRole("button", { name: "Accept changes" }),
     ).toBeDisabled();
   });
+  it.each(["recorded", "failed"])(
+    "isolates a late local decision when only the host changes: %s",
+    async (outcome) => {
+      get.mockResolvedValue({ data: readyForDecision() });
+      let resolveDecision: (value: { status: string }) => void = () => {};
+      let rejectDecision: (error: Error) => void = () => {};
+      decide.mockImplementation(
+        () => new Promise((resolve, reject) => {
+          resolveDecision = resolve;
+          rejectDecision = reject;
+        }),
+      );
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      const panel = (hostId?: string) => (
+        <QueryClientProvider client={client}>
+          <LocalWorkflowPanel sessionId="worker" hostId={hostId} />
+        </QueryClientProvider>
+      );
+      const view = render(panel());
+      fireEvent.change(await screen.findByRole("textbox", { name: "Decision comment" }), {
+        target: { value: "Only for this local host" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Accept changes" }));
+      await waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+
+      view.rerender(panel("other-host"));
+      await waitFor(() => expect(
+        screen.getByRole("textbox", { name: "Decision comment" }),
+      ).toHaveValue(""));
+      expect(screen.getByRole("button", { name: "Accept changes" })).toBeDisabled();
+      await act(async () => {
+        if (outcome === "recorded") resolveDecision({ status: "recorded" });
+        else rejectDecision(new Error("Previous local host disconnected"));
+      });
+      expect(screen.queryByText("Accepted by you")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("textbox", { name: "Decision comment" })).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Accept changes" })).toBeDisabled();
+      expect(decide).toHaveBeenCalledTimes(1);
+    },
+  );
 });
