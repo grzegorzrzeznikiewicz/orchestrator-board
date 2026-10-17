@@ -19,7 +19,7 @@ import (
 type workflowHTTPService struct{ err error }
 
 func (s workflowHTTPService) Get(context.Context, domain.SessionID) (localworkflow.Snapshot, error) {
-	return localworkflow.Snapshot{Run: &domain.LocalWorkflowRun{ID: "wf", Task: "private task", Env: map[string]string{"SECRET": "do not expose"}, WorkspacePath: "/private/path", Version: 1, Phase: domain.WorkflowWaiting}}, s.err
+	return localworkflow.Snapshot{Stage: "executing", Reviews: []domain.ReviewRun{{ID: "review-1", SnapshotID: "content-1", SnapshotPath: "/private/path", SnapshotObservation: "private-observation", Harness: domain.ReviewerClaudeCode, LocalResult: &domain.LocalReviewResult{Summary: "Checked task"}}}, Run: &domain.LocalWorkflowRun{ID: "wf", Task: "private task", Env: map[string]string{"SECRET": "do not expose"}, WorkspacePath: "/private/path", Version: 1, Phase: domain.WorkflowWaiting}}, s.err
 }
 func (s workflowHTTPService) Start(ctx context.Context, id domain.SessionID, _ string) (localworkflow.Snapshot, error) {
 	return s.Get(ctx, id)
@@ -58,6 +58,21 @@ func TestLocalWorkflowHTTPContract(t *testing.T) {
 			}
 			if strings.Contains(response.Body.String(), "SECRET") || strings.Contains(response.Body.String(), "/private/path") || strings.Contains(response.Body.String(), "private task") {
 				t.Fatal("leaked private execution inputs")
+			}
+			if tc.want == 200 {
+				var wire struct {
+					Stage   string             `json:"stage"`
+					Reviews []domain.ReviewRun `json:"reviews"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &wire); err != nil {
+					t.Fatal(err)
+				}
+				if wire.Stage != "executing" || len(wire.Reviews) != 1 || wire.Reviews[0].LocalResult.Summary != "Checked task" {
+					t.Fatalf("lost workflow presentation: %s", response.Body.String())
+				}
+				if strings.Contains(response.Body.String(), "private-observation") {
+					t.Fatal("leaked private observation")
+				}
 			}
 			var result any
 			if e := json.Unmarshal(response.Body.Bytes(), &result); e != nil {

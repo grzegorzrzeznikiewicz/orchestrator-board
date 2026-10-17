@@ -155,6 +155,66 @@ beforeEach(() => {
 });
 
 describe("SessionsBoard", () => {
+it("keeps local workflow and PR sessions on their own board and opens local evidence", async () => {
+	useUiStore.setState({inspectorSessions:{}});
+	const local = boardSession({
+		id: "local",
+		title: "Local task",
+		status: "working",
+		provider: "codex",
+	});
+	const pr = boardSession({
+		id: "pr",
+		title: "PR task",
+		status: "working",
+		workspaceId: "p2",
+	});
+	workspaceQueryMock.mockReturnValue({
+		data: [
+			{ ...workspaceWithSessions([local]), reviewMode: "local" },
+			{ ...workspaceWithSessions([pr]), id: "p2" },
+		],
+		isError: false,
+	});
+	const client = new QueryClient({
+		defaultOptions: { queries: { retry: false } },
+	});
+	client.setQueryData(["local-workflow", "local"], {
+		run: {
+			id: "wf",
+			phase: "testing",
+			cycle: 1,
+			maxRounds: 3,
+			testCommands: ["npm test"],
+		},
+		stage: "testing",
+		current: false,
+		operations: [],
+		tests: [],
+		requiredFindings: [],
+		reviews: [],
+	});
+	renderBoardWithClient(client);
+	const tests = await screen.findByRole("region", { name: "Tests sessions" });
+	expect(within(tests).getByText("Local task")).toBeVisible();
+	expect(within(tests).queryByText("PR task")).toBeNull();
+	const building = screen.getByRole("region", { name: "Building sessions" });
+	expect(within(building).getByText("PR task")).toBeVisible();
+	expect(within(building).queryByText("Local task")).toBeNull();
+	await userEvent.click(within(tests).getByText("Local task"));
+	// Reproduce SessionView initialization after the route mounts.
+	useUiStore.getState().initializeInspectorSession("local", false, true);
+	expect(useUiStore.getState().inspectorSessions.local).toMatchObject({
+		isOpen: true,
+		view: "reviews",
+	});
+	expect(navigateMock).toHaveBeenCalledWith(
+		expect.objectContaining({
+			params: { projectId: "p1", sessionId: "local" },
+		}),
+	);
+});
+
 	it("shows the Cloud loader instead of Chat while a cloud orchestrator is starting", () => {
 		workspaceQueryMock.mockReturnValue({ data: [{ id: "p1", name: "Cloud project", kind: "cloud", path: "", sessions: [] }], isSuccess: true });
 		useUiStore.getState().setProjectProvisioning("p1", true);

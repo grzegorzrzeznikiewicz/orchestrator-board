@@ -5184,7 +5184,10 @@ export interface components {
             current: boolean;
             operations: components["schemas"]["LocalWorkflowOperation"][];
             requiredFindings: components["schemas"]["LocalReviewFinding"][];
+            reviews: components["schemas"]["ReviewRun"][];
             run: null | components["schemas"]["LocalWorkflowRun"];
+            /** @enum {string} */
+            stage: "executing" | "testing" | "local_review" | "fixing" | "awaiting_acceptance";
             tests: components["schemas"]["LocalWorkflowTestResult"][];
         };
         LocalWorkflowRun: {
@@ -5460,6 +5463,8 @@ export interface components {
             orchestratorAgent?: string;
             path: string;
             resolveError?: string;
+            /** @enum {string} */
+            reviewMode?: "pr" | "local";
             sessionPrefix: string;
         };
         PromoteQueuedTurnResponse: {

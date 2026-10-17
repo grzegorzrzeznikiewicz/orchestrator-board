@@ -40,6 +40,8 @@ type Reviews interface {
 
 // Snapshot is a read model of the current workflow and its accumulated evidence.
 type Snapshot struct {
+	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance"`
+	Reviews          []domain.ReviewRun               `json:"reviews"`
 	Run              *domain.LocalWorkflowRun         `json:"run"`
 	Operations       []domain.LocalWorkflowOperation  `json:"operations"`
 	Tests            []domain.LocalWorkflowTestResult `json:"tests"`
@@ -244,7 +246,7 @@ func (c *Coordinator) Get(ctx context.Context, id domain.SessionID) (Snapshot, e
 		return Snapshot{}, e
 	}
 	if !ok {
-		return Snapshot{Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
+		return Snapshot{Stage: "executing", Reviews: []domain.ReviewRun{}, Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
 	}
 	return c.snapshot(ctx, r)
 }
@@ -257,11 +259,21 @@ func (c *Coordinator) snapshot(ctx context.Context, r domain.LocalWorkflowRun) (
 	if e != nil {
 		return Snapshot{}, e
 	}
-	snap := Snapshot{Run: &r, Operations: ops, Tests: tests, RequiredFindings: []domain.LocalReviewFinding{}}
-	if op := latestOperation(ops, "review", 0); op != nil && op.ReviewRunID != "" {
-		review, e := c.deps.Reviews.GetWorkflowLocal(ctx, op.ReviewRunID)
-		if e != nil {
-			return snap, e
+	snap := Snapshot{Run: &r, Operations: ops, Tests: tests, Reviews: []domain.ReviewRun{}, RequiredFindings: []domain.LocalReviewFinding{}}
+	latestReview := latestOperation(ops, "review", 0)
+	for _, op := range ops {
+		if op.Kind != "review" || op.ReviewRunID == "" {
+			continue
+		}
+		review, err := c.deps.Reviews.GetWorkflowLocal(ctx, op.ReviewRunID)
+		if err != nil {
+			return snap, err
+		}
+		if review.ID != "" {
+			snap.Reviews = append(snap.Reviews, review)
+		}
+		if latestReview == nil || op.ID != latestReview.ID {
+			continue
 		}
 		if review.LocalResult != nil {
 			for _, finding := range review.LocalResult.Findings {
@@ -272,6 +284,8 @@ func (c *Coordinator) snapshot(ctx context.Context, r domain.LocalWorkflowRun) (
 		}
 		snap.Current = r.Phase == domain.WorkflowReady && review.Current && review.Verdict == domain.VerdictApproved && c.checkGuard(ctx, r.ID) == nil
 	}
+	snap.Stage = workflowStage(snap)
+
 	return snap, nil
 }
 func latestOperation(ops []domain.LocalWorkflowOperation, kind string, cycle int) *domain.LocalWorkflowOperation {

@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalWorkflowPanel } from "./LocalWorkflowPanel";
@@ -150,4 +152,143 @@ describe("LocalWorkflowPanel", () => {
       expect.objectContaining({ body: { expectedVersion: 4 } }),
     );
   });
+});
+
+it("keeps tests, review findings and logs attached to their round after reopening", async () => {
+  const evidence = {
+    ...snapshot,
+    operations: [
+      {
+        id: "t1",
+        kind: "tests",
+        cycle: 1,
+        attempt: 1,
+        state: "succeeded",
+        startedAt: run.createdAt,
+      },
+      {
+        id: "r1",
+        kind: "review",
+        cycle: 1,
+        attempt: 1,
+        state: "succeeded",
+        reviewRunId: "review1",
+        snapshotId: "content1",
+        startedAt: run.createdAt,
+      },
+      {
+        id: "t2",
+        kind: "tests",
+        cycle: 2,
+        attempt: 1,
+        state: "failed",
+        startedAt: run.createdAt,
+      },
+    ],
+    tests: [
+      {
+        id: "test1",
+        operationId: "t1",
+        command: "npm test first",
+        status: "succeeded",
+        exitCode: 0,
+      },
+      {
+        id: "test2",
+        operationId: "t2",
+        command: "npm test second",
+        status: "failed",
+        exitCode: 7,
+      },
+    ],
+    reviews: [
+      {
+        id: "review1",
+        harness: "claude-code",
+        status: "complete",
+        verdict: "changes_requested",
+        localResult: {
+          summary: "Input is not validated",
+          findings: [
+            {
+              kind: "required",
+              path: "input.ts",
+              line: 7,
+              reason: "Reject empty input",
+            },
+            {
+              kind: "suggestion",
+              path: "input.ts",
+              line: 9,
+              reason: "Optional naming improvement",
+            },
+          ],
+        },
+      },
+    ],
+  };
+  get.mockImplementation((url: string) =>
+    Promise.resolve({
+      data: url.endsWith("/logs")
+        ? { text: "round one output", truncated: false }
+        : evidence,
+    }),
+  );
+  const first = show();
+  const round1 = await screen.findByRole("region", { name: "Round 1" });
+  expect(within(round1).getByText("npm test first")).toBeVisible();
+  expect(within(round1).getByText("Reject empty input")).toBeVisible();
+  expect(within(round1).getByText("Optional naming improvement")).toBeVisible();
+  expect(within(round1).getByText("content1")).toBeVisible();
+  const round2 = screen.getByRole("region", { name: "Round 2" });
+  expect(within(round2).getByText("npm test second")).toBeVisible();
+  expect(within(round2).queryByText("Reject empty input")).toBeNull();
+  fireEvent.click(within(round1).getByRole("button", { name: "Show stdout" }));
+  expect(await screen.findByText("round one output")).toBeVisible();
+  first.unmount();
+  show();
+  expect(
+    await screen.findByRole("region", { name: "Round 1" }),
+  ).toHaveTextContent("Input is not validated");
+});
+
+it("does not show a late log response in another session", async () => {
+  let resolveLog!: (value: unknown) => void;
+  get.mockImplementation((url: string) =>
+    url.endsWith("/logs")
+      ? new Promise((resolve) => {
+          resolveLog = resolve;
+        })
+      : Promise.resolve({
+          data: {
+            ...snapshot,
+            tests: [
+              {
+                id: "old-test",
+                command: "npm test",
+                status: "failed",
+                exitCode: 1,
+              },
+            ],
+          },
+        }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const panel = (sessionId: string) => (
+    <QueryClientProvider client={client}>
+      <LocalWorkflowPanel sessionId={sessionId} />
+    </QueryClientProvider>
+  );
+  const view = render(panel("worker"));
+  fireEvent.click(await screen.findByRole("button", { name: "Show stdout" }));
+  await waitFor(() => expect(resolveLog).toBeDefined());
+  view.rerender(panel("other-worker"));
+  await act(async () =>
+    resolveLog({
+      data: { text: "Private previous session output", truncated: false },
+    }),
+  );
+  expect(screen.queryByText("Private previous session output")).toBeNull();
 });

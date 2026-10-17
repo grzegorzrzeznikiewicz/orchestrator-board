@@ -1,10 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type UseQueryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useRef } from "react";
 import {
   getLocalWorkflow,
   startLocalWorkflow,
   stopLocalWorkflow,
   resumeLocalWorkflow,
+  type LocalWorkflowSnapshot,
 } from "../lib/local-workflow-api";
 
 export const localWorkflowQueryKey = (sessionId: string, hostId?: string) =>
@@ -19,22 +25,7 @@ export function useLocalWorkflow(sessionId: string, hostId?: string) {
   const client = useQueryClient();
   const key = localWorkflowQueryKey(sessionId, hostId);
   const requestId = useRef<string | null>(null);
-  const query = useQuery({
-    queryKey: key,
-    queryFn: () => getLocalWorkflow(sessionId, hostId),
-    refetchInterval: (q) =>
-      q.state.data?.run &&
-      [
-        "waiting_executor",
-        "testing",
-        "reviewing",
-        "fixing",
-        "stopping",
-      ].includes(q.state.data.run.phase)
-        ? 1000
-        : 10000,
-    refetchOnReconnect: "always",
-  });
+  const query = useQuery(localWorkflowQueryOptions(sessionId, hostId));
   const action = useMutation({
     mutationFn: (input: Action) => {
       if (input.kind === "start") {
@@ -59,4 +50,26 @@ export function useLocalWorkflow(sessionId: string, hostId?: string) {
     },
   });
   return { query, action };
+}
+
+export function localWorkflowQueryOptions(
+  sessionId: string,
+  hostId?: string,
+): UseQueryOptions<LocalWorkflowSnapshot, Error> {
+  return {
+    queryKey: localWorkflowQueryKey(sessionId, hostId),
+    queryFn: () => getLocalWorkflow(sessionId, hostId),
+    refetchInterval: (q) =>
+      q.state.data?.run &&
+      [
+        "waiting_executor",
+        "testing",
+        "reviewing",
+        "fixing",
+        "stopping",
+      ].includes(q.state.data.run.phase)
+        ? 1000
+        : 10000,
+    refetchOnReconnect: "always",
+  };
 }

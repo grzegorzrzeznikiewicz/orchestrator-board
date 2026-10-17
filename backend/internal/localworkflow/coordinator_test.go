@@ -181,6 +181,7 @@ func TestWorkflowFullCorrectionLoop(t *testing.T) {
 	if !ready.Current || ready.Run.Cycle != 2 || ready.Run.MaxRounds != 3 || len(ready.Tests) != 2 || f.worker.fixes != 1 {
 		t.Fatalf("ready=%+v fixes=%d", ready, f.worker.fixes)
 	}
+	assertWorkflowPresentation(t, ready, "awaiting_acceptance", 2)
 	if len(ready.RequiredFindings) != 0 {
 		t.Fatal("suggestion became requirement")
 	}
@@ -197,6 +198,7 @@ func TestWorkflowFullCorrectionLoop(t *testing.T) {
 		t.Fatal(e)
 	}
 	stale, e := f.coordinator.Get(ctx, f.session.ID)
+	assertWorkflowPresentation(t, stale, "local_review", 2)
 	if e != nil || stale.Current {
 		t.Fatalf("stale readiness: %+v %v", stale, e)
 	}
@@ -314,7 +316,9 @@ func TestWorkflowRejectsIncompleteTestEvidence(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if !f.coordinator.isActive(snap.Operations[0].ID) {
+		// Inspect one durable snapshot: the runner can finish after Get but
+		// before an isActive check, leaving the earlier phase stale.
+		if snap.Run.Phase != domain.WorkflowTesting {
 			if snap.Run.Phase != domain.WorkflowBlocked || snap.Run.BlockCode != "tests_failed" {
 				t.Fatalf("incomplete evidence advanced: %+v", snap.Run)
 			}
@@ -509,5 +513,30 @@ func TestDeadTestHostDoesNotAllowOverlappingRetry(t *testing.T) {
 	}
 	if after.Run.Phase == domain.WorkflowStopped {
 		t.Fatal("Stop forgot surviving command")
+	}
+}
+
+// Reading the wire model catches missing history and premature board readiness.
+func assertWorkflowPresentation(t *testing.T, snapshot Snapshot, stage string, reviews int) {
+	t.Helper()
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Stage   string `json:"stage"`
+		Reviews []struct {
+			ID          string                    `json:"id"`
+			LocalResult *domain.LocalReviewResult `json:"localResult"`
+		} `json:"reviews"`
+	}
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire.Stage != stage || len(wire.Reviews) != reviews {
+		t.Fatalf("stage=%q reviews=%d; want %s and %d", wire.Stage, len(wire.Reviews), stage, reviews)
+	}
+	if reviews == 2 && (wire.Reviews[0].LocalResult == nil || wire.Reviews[0].LocalResult.Outcome != "changes_requested" || wire.Reviews[1].LocalResult == nil || wire.Reviews[1].LocalResult.Outcome != "approved") {
+		t.Fatalf("lost round results: %s", encoded)
 	}
 }

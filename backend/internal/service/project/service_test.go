@@ -2,6 +2,7 @@ package project_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -1037,6 +1038,9 @@ func TestManager_ListIncludesOnlySummarySafeProjectConfig(t *testing.T) {
 
 	cfg := domain.ProjectConfig{
 		DefaultBranch: "develop",
+		ReviewMode:    domain.ReviewTargetLocal,
+		Worker:        domain.RoleOverride{Harness: domain.HarnessCodex},
+		Reviewers:     []domain.ReviewerConfig{{Harness: domain.ReviewerClaudeCode}},
 		Env:           map[string]string{"GITHUB_TOKEN": "secret"},
 		Orchestrator:  domain.RoleOverride{Harness: domain.HarnessCodex},
 	}
@@ -1054,6 +1058,20 @@ func TestManager_ListIncludesOnlySummarySafeProjectConfig(t *testing.T) {
 	if list[0].OrchestratorAgent != domain.HarnessCodex {
 		t.Fatalf("summary orchestrator agent = %q, want codex", list[0].OrchestratorAgent)
 	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire []struct {
+		ReviewMode string `json:"reviewMode"`
+	}
+	if err = json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if len(wire) != 1 || wire[0].ReviewMode != "local" {
+		t.Fatalf("missing safe review mode: %s", raw)
+	}
+
 }
 
 func TestManager_ReaddAfterRemove(t *testing.T) {

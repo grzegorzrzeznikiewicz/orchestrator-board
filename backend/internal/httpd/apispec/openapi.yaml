@@ -15249,16 +15249,30 @@ components:
           items:
             $ref: '#/components/schemas/LocalReviewFinding'
           type: array
+        reviews:
+          items:
+            $ref: '#/components/schemas/ReviewRun'
+          type: array
         run:
           anyOf:
           - type: "null"
           - $ref: '#/components/schemas/LocalWorkflowRun'
             type: object
+        stage:
+          enum:
+          - executing
+          - testing
+          - local_review
+          - fixing
+          - awaiting_acceptance
+          type: string
         tests:
           items:
             $ref: '#/components/schemas/LocalWorkflowTestResult'
           type: array
       required:
+      - stage
+      - reviews
       - run
       - operations
       - tests
@@ -15957,6 +15971,11 @@ components:
         path:
           type: string
         resolveError:
+          type: string
+        reviewMode:
+          enum:
+          - pr
+          - local
           type: string
         sessionPrefix:
           type: string

@@ -21,6 +21,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/localworkflow"
 	reviewcore "github.com/aoagents/agent-orchestrator/backend/internal/review"
 	reviewsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/review"
+	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite/sqlitetest"
 )
 
@@ -147,7 +148,7 @@ func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if final.Run == nil || !final.Current || final.Run.Cycle != 2 || len(final.Tests) != 2 || len(submitted) != 2 {
+	if final.Run == nil || !final.Current || final.Stage != "awaiting_acceptance" || len(final.Reviews) != 2 || final.Reviews[0].LocalResult.Outcome != "changes_requested" || final.Reviews[1].LocalResult.Outcome != "approved" || final.Run.Cycle != 2 || len(final.Tests) != 2 || len(submitted) != 2 {
 		t.Fatalf("incomplete loop: %+v", final)
 	}
 	model.mu.Lock()
@@ -163,4 +164,33 @@ func TestLocalWorkflowHTTPRunsTestsCorrectionsAndRealReviewService(t *testing.T)
 	if e = exec.Command("git", "-C", root, "rev-parse", "--verify", "HEAD").Run(); e == nil {
 		t.Fatal("workflow created a commit")
 	}
+	// Reopen storage and services as a new daemon would. Reviewer evidence must
+	// come from SQLite, and a lost live guard must not imply readiness.
+	if e = coordinator.Close(ctx); e != nil {
+		t.Fatal(e)
+	}
+	engine.CloseLocalReviews()
+	if e = store.Close(); e != nil {
+		t.Fatal(e)
+	}
+	reopened, e := sqlite.Open(dataDir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer func() { _ = reopened.Close() }()
+	restoredEngine := reviewcore.New(reviewcore.Deps{Store: reopened, Sessions: reopened, PRs: reopened, Projects: reopened, Launcher: &localReviewLauncher{}, DataDir: dataDir})
+	defer restoredEngine.CloseLocalReviews()
+	restoredCoordinator := localworkflow.New(localworkflow.Deps{Store: reopened, Worker: model, Tests: localworkflow.NewTestRunner(dataDir), Reviews: reviewsvc.New(restoredEngine, reopened), DataDir: dataDir})
+	defer func() { _ = restoredCoordinator.Close(ctx) }()
+	if e = restoredCoordinator.Recover(ctx); e != nil {
+		t.Fatal(e)
+	}
+	restored, e := restoredCoordinator.Get(ctx, worker.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if restored.Current || restored.Stage != "local_review" || len(restored.Reviews) != 2 || len(restored.Tests) != 2 || restored.Reviews[0].ID != final.Reviews[0].ID || restored.Reviews[1].ID != final.Reviews[1].ID || restored.Reviews[0].LocalResult.Outcome != "changes_requested" || restored.Reviews[1].LocalResult.Outcome != "approved" {
+		t.Fatalf("lost persisted round history after restart: %+v", restored)
+	}
+
 }

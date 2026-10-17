@@ -427,6 +427,7 @@ export { attentionZone, attentionZoneLabel, attentionZoneOrder } from "../lib/se
 export type { AttentionZone } from "../lib/session-presentation";
 
 export type WorkspaceSummary = {
+	reviewMode?: "pr" | "local";
 	id: string;
 	cloudOrgId?: string;
 	/** Installation ID of the daemon that owns this project; absent for local and Cloud. */
