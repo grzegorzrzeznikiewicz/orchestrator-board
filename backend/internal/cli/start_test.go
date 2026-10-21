@@ -238,7 +238,10 @@ func TestIsUsableBundle_RegularFileVsDir(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	subdir := makeBundle(t, appBundleName)
+	subdir := filepath.Join(dir, appBundleName)
+	if runtime.GOOS == "darwin" {
+		subdir = makeBundle(t, appBundleName)
+	}
 	if err := os.MkdirAll(subdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
