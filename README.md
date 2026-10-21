@@ -36,6 +36,8 @@ Behind the desktop app, Orchestrator Board's local daemon watches agent activity
 
 Orchestrator Board is the Gama Software fork of Agent Orchestrator. Signed production downloads have not yet been published for this fork. Use only [this fork’s releases](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases) when builds become available; the original product’s releases are a different application.
 
+For the approved personal macOS DMG installation and the first Local task, follow [Pierwsze uruchomienie macOS — Codex, Claude i workflow Local](docs/ob-8-first-run.md) (Polish). It covers provider sign-in, project test commands, human acceptance and restart checks.
+
 For local development, follow [the development guide](docs/development.md). The desktop application is the intended distribution; the frozen upstream npm launcher is not an Orchestrator Board installer.
 
 The fork keeps daemon data and projects under `~/.ao` (or `AO_DATA_DIR`). It uses a distinct application bundle and executable. See [fork identity, updates and data compatibility](docs/ob-10-fork-identity.md) before running alongside the original application. Do not replace an original installation with an unsigned development build.

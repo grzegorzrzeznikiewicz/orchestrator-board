@@ -2,7 +2,7 @@
 <!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
 
 
-Status: final acceptance is being completed on `feature/OB-10` under the user's instruction to leave all changes uncommitted and unpushed. Current results will be recorded in the final acceptance report; the section dated 17 October below is historical and does not describe the latest package. See [the design](superpowers/specs/2026-10-17-ob-10-fork-branding-design.md) and [implementation plan](superpowers/plans/2026-10-17-ob-10-fork-branding.md).
+Status: final acceptance is being completed on `feature/OB-10` under the user's instruction to leave all changes uncommitted and unpushed. Current results will be recorded in the final acceptance report; the section dated 17 October below is historical and does not describe the latest package. See [the design](superpowers/specs/2026-10-17-ob-10-fork-branding-design.md), [implementation plan](superpowers/plans/2026-10-17-ob-10-fork-branding.md) and [first-run guide](ob-8-first-run.md).
 
 ## Product and source
 
