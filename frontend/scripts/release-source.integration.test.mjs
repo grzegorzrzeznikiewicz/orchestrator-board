@@ -35,9 +35,10 @@ async function withUpdater(mode, action) {
   const configPath = join(dir, "app-update.yml");
   writeFileSync(configPath, "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n");
   const bytes = Buffer.from("This payload is deliberately not a signed archive.");
+  // A universal fixture reaches the real checksum check on both x64 and arm64.
   const manifest = {
     version: mode === "current" ? "1.0.0-nightly.1" : "2.0.0-nightly.1",
-    files: [{ url: mode === "foreign" ? "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v2.0.0/update.zip" : "orchestrator-board-darwin-arm64.zip",
+    files: [{ url: mode === "foreign" ? "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v2.0.0/update.zip" : "orchestrator-board-darwin-universal.zip",
       sha512: createHash("sha512").update("different bytes").digest("base64"), size: bytes.length }],
   };
   const server = createServer((req, res) => {
