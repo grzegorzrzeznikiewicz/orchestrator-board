@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -60,20 +62,32 @@ type hostTestResult struct {
 	Err    string
 }
 type hostResult struct {
-	Tests []hostTestResult
-	Error string
+	Tests                []hostTestResult
+	Error                string
+	CommandTreeUncertain bool
 }
 
-func readHostResult(dir string) (TestProcessState, error) {
+func readHostPublication(dir string) (hostResult, error) {
 	b, e := os.ReadFile(filepath.Join(dir, "result.json"))
 	if e != nil {
-		return TestProcessState{}, e
+		return hostResult{}, e
 	}
 	var result hostResult
 	if e := json.Unmarshal(b, &result); e != nil {
+		return hostResult{}, e
+	}
+	return result, nil
+}
+
+func readHostResult(dir string) (TestProcessState, error) {
+	result, e := readHostPublication(dir)
+	if e != nil {
 		return TestProcessState{}, e
 	}
 	state := TestProcessState{State: "settled", Error: result.Error, Results: make([]domain.LocalWorkflowTestResult, 0, len(result.Tests))}
+	if result.CommandTreeUncertain {
+		state.State = "uncertain"
+	}
 	for _, v := range result.Tests {
 		test := v.Result
 		test.StdoutLog = v.Out
@@ -136,6 +150,20 @@ func (r *FileTestRunner) Reconcile(ctx context.Context, id string) (TestProcessS
 	return TestProcessState{State: "uncertain"}, nil
 }
 
+// Waiting reports a host that has not yet been admitted to run commands.
+// Durable completion always takes precedence over a queue marker.
+func (r *FileTestRunner) Waiting(id string) bool {
+	dir, err := r.operationDir(id)
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "result.json")); err == nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(dir, "waiting.json"))
+	return err == nil
+}
+
 // Cancel asks the owning host to cancel without signaling a recorded PID.
 func (r *FileTestRunner) Cancel(ctx context.Context, id string) error {
 	if e := ctx.Err(); e != nil {
@@ -177,7 +205,10 @@ func (r *FileTestRunner) Run(ctx context.Context, plan TestPlan) ([]domain.Local
 		if state.State == "settled" {
 			return testResultsOutcome(state)
 		}
-		return nil, fmt.Errorf("test operation %s is %s; refusing to launch twice", plan.OperationID, state.State)
+		if state.Error != "" {
+			return state.Results, fmt.Errorf("test operation %s is %s; refusing to launch twice: %s", plan.OperationID, state.State, state.Error)
+		}
+		return state.Results, fmt.Errorf("test operation %s is %s; refusing to launch twice", plan.OperationID, state.State)
 	}
 	if e != nil {
 		return nil, e
@@ -240,6 +271,9 @@ func (r *FileTestRunner) Run(ctx context.Context, plan TestPlan) ([]domain.Local
 func testResultsOutcome(state TestProcessState) ([]domain.LocalWorkflowTestResult, error) {
 	if state.Error != "" {
 		return state.Results, errors.New(state.Error)
+	}
+	if state.State == "uncertain" {
+		return state.Results, errors.New("test command tree completion uncertain")
 	}
 	return state.Results, nil
 }

@@ -1093,3 +1093,21 @@ it("refreshes again when a root catch-up joins an older targeted conversation fe
 		vi.useRealTimers();
 	}
 });
+
+it("refreshes only workflow cards and details for the changed session", async () => {
+ vi.useFakeTimers();
+ const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+ client.setQueryData(["local-workflow-summaries", "local", ["one"]], []);
+ client.setQueryData(["local-workflow-summaries", "local", ["two"]], []);
+ client.setQueryData(["local-workflow", "one"], {});
+ client.setQueryData(["local-workflow", "two"], {});
+ const disconnect = createEventTransport(client).connect();
+ const source = cdcSources()[0];
+ source.emit("session_updated", JSON.stringify({type:"session_updated",sessionId:"one",payload:{workflowId:"wf"}}));
+ await vi.advanceTimersByTimeAsync(200);
+ expect(client.getQueryState(["local-workflow-summaries", "local", ["one"]])?.isInvalidated).toBe(true);
+ expect(client.getQueryState(["local-workflow-summaries", "local", ["two"]])?.isInvalidated).toBe(false);
+ expect(client.getQueryState(["local-workflow", "one"])?.isInvalidated).toBe(true);
+ expect(client.getQueryState(["local-workflow", "two"])?.isInvalidated).toBe(false);
+ disconnect();
+});

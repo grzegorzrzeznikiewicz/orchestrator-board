@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { getLocalWorkflow } from "../lib/local-workflow-api";
 import { localWorkflowQueryKey } from "../hooks/use-local-workflow";
 import { FileText, MessageSquare } from "lucide-react";
@@ -1321,12 +1323,11 @@ function LocalReviewsSection({
 		queryKey: hostId ? ["project-config", hostId, session.workspaceId] : ["project-config", session.workspaceId],
 		enabled: true,
 		queryFn: async () => {
-			if (usePreviewData) return mockProjectConfig();
 			const { data, error } = await clientForSessionHost(hostId).GET("/api/v1/projects/{id}", {
 				params: { path: { id: session.workspaceId } },
 			});
-			if (error) return undefined;
-			return projectConfig(data?.project);
+			if (error) return usePreviewData ? mockProjectConfig() : undefined;
+			return projectConfig(data?.project) ?? (usePreviewData ? mockProjectConfig() : undefined);
 		},
 	});
  const workflowQuery = useQuery({

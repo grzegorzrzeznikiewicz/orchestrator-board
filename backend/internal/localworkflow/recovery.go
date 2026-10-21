@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -15,6 +17,23 @@ func (c *Coordinator) Recover(ctx context.Context) error {
 	}
 	for _, r := range runs {
 		unlock := c.lock(r.ID)
+		if r.PlanState == "running" && (r.Phase == domain.WorkflowWaiting || r.Phase == domain.WorkflowStopping) {
+			stopProviderRetry(&r, "uncertain")
+			e = c.block(ctx, r, "provider_execution_uncertain", fmt.Errorf("daemon restarted during planning; previous provider termination is unconfirmed; end the affected session before starting another task"))
+			unlock()
+			if e != nil {
+				return e
+			}
+			continue
+		}
+		if r.ProviderRetry != nil && r.ProviderRetry.State == "checking" {
+			e = c.providerRetryUncertain(ctx, r)
+			unlock()
+			if e != nil {
+				return e
+			}
+			continue
+		}
 		switch r.Phase {
 		case domain.WorkflowBlocked, domain.WorkflowStopped: // Preserve durable reasons.
 		case domain.WorkflowWaiting: // No external verification has started yet.

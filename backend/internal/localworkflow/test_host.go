@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -7,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
@@ -74,8 +78,26 @@ func RunTestHost(args []string) (bool, int) {
 		}
 	}()
 	result := hostResult{Tests: []hostTestResult{}}
+	slot, admissionErr := acquireTestAdmission(ctx, plan.DataDir, dir)
+	if admissionErr != nil {
+		result.Error = fmt.Sprintf("test admission: %v", admissionErr)
+	} else {
+		// Closing the slot only after result publication keeps all project
+		// commands and their completion evidence within the admission limit.
+		defer func() { _ = slot.Close() }()
+		if _, err := os.Stat(filepath.Join(dir, "cancel")); err == nil {
+			cancel()
+		}
+		if err := ctx.Err(); err != nil {
+			result.Error = err.Error()
+		}
+	}
 	for i, command := range plan.Commands {
-		test, e := runTestCommand(ctx, plan, dir, i, command)
+		if result.Error != "" {
+			break
+		}
+		test, uncertain, e := runTestCommand(ctx, plan, dir, i, command)
+		result.CommandTreeUncertain = result.CommandTreeUncertain || uncertain
 		result.Tests = append(result.Tests, hostTestResult{test, test.StdoutLog, test.StderrLog})
 		if e != nil {
 			result.Error = e.Error()
@@ -110,13 +132,14 @@ func (w *cappedLog) Write(b []byte) (int, error) {
 	}
 	return n, nil
 }
-func runTestCommand(parent context.Context, plan TestPlan, dir string, index int, command string) (domain.LocalWorkflowTestResult, error) {
+func runTestCommand(parent context.Context, plan TestPlan, dir string, index int, command string) (domain.LocalWorkflowTestResult, bool, error) {
 	now := time.Now().UTC()
 	test := domain.LocalWorkflowTestResult{ID: fmt.Sprintf("%s-%d", plan.OperationID, index), OperationID: plan.OperationID, CommandIndex: index, Command: command, Status: "failed", StartedAt: now, StdoutLog: filepath.Join(dir, fmt.Sprintf("%d.stdout", index)), StderrLog: filepath.Join(dir, fmt.Sprintf("%d.stderr", index))}
-	finish := func(e error) (domain.LocalWorkflowTestResult, error) {
+	uncertain := false
+	finish := func(e error) (domain.LocalWorkflowTestResult, bool, error) {
 		at := time.Now().UTC()
 		test.CompletedAt = &at
-		return test, e
+		return test, uncertain, e
 	}
 	out, e := os.OpenFile(test.StdoutLog, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if e != nil {
@@ -138,6 +161,16 @@ func runTestCommand(parent context.Context, plan TestPlan, dir string, index int
 	defer cancel()
 	cmd := testShellCommand(ctx, command)
 	process.ConfigureTreeCancellation(cmd)
+	configureTestCommandCancellation(cmd)
+	cancelTree := cmd.Cancel
+	var cancellationFailed atomic.Bool
+	cmd.Cancel = func() error {
+		err := cancelTree()
+		if err != nil && !errors.Is(err, os.ErrProcessDone) {
+			cancellationFailed.Store(true)
+		}
+		return err
+	}
 	cmd.Dir = plan.WorkspacePath
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Env = os.Environ()
@@ -147,6 +180,7 @@ func runTestCommand(parent context.Context, plan TestPlan, dir string, index int
 	cmd.Stdout = io.Writer(stdoutWriter)
 	cmd.Stderr = io.Writer(stderrWriter)
 	e = cmd.Run()
+	uncertain = errors.Is(e, exec.ErrWaitDelay) || cancellationFailed.Load()
 	test.StdoutTruncated = stdoutWriter.truncated
 	test.StderrTruncated = stderrWriter.truncated
 	if cmd.ProcessState != nil {
@@ -168,6 +202,9 @@ func runTestCommand(parent context.Context, plan TestPlan, dir string, index int
 		e = ctx.Err()
 	case e == nil:
 		test.Status = "succeeded"
+	}
+	if uncertain {
+		e = fmt.Errorf("command tree completion uncertain: %w", e)
 	}
 	if e != nil {
 		e = fmt.Errorf("test command %d %s: %w", index+1, test.Status, e)

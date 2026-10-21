@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
@@ -96,6 +98,36 @@ function hoursAgo(hours: number): string {
 }
 
 describe("CreateProjectAgentSheet", () => {
+	it("defaults new local projects to the Codex and Claude local workflow with test setup guidance", async () => {
+		const onSubmit = renderSheet();
+		expect(screen.getByRole("combobox", { name: "Review mode" })).toHaveValue("local");
+		expect(screen.getByLabelText("Worker agent")).toHaveTextContent(/codex/i);
+		expect(screen.getByText(/Claude reviews locally/)).toBeInTheDocument();
+		expect(screen.getByText(/test commands in project settings/i)).toBeInTheDocument();
+		await userEvent.click(screen.getByRole("button", { name: "Create and start" }));
+		await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ workerAgent: "codex", orchestratorAgent: "claude-code", reviewMode: "local", trackerIntake: undefined }));
+	});
+
+	it("allows explicit PR creation with its existing agent defaults", async () => {
+		const onSubmit = renderSheet();
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
+		expect(screen.getByLabelText("Worker agent")).toHaveTextContent(/claude.code/i);
+		expect(screen.queryByText(/Claude reviews locally/)).not.toBeInTheDocument();
+		await userEvent.click(screen.getByRole("button", { name: "Create and start" }));
+		await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ workerAgent: "claude-code", orchestratorAgent: "claude-code", reviewMode: "pr", trackerIntake: undefined }));
+	});
+
+	it("keeps remote projects on their existing selection without offering a local mode default", async () => {
+		remote.get.mockResolvedValue({ data: { agents: [agentReadiness("opencode")] } });
+		remote.post.mockResolvedValue({ data: { agents: [agentReadiness("opencode")] } });
+		const onSubmit = renderSheet(vi.fn().mockResolvedValue(undefined), undefined, { hostId: "box-a" });
+		expect(screen.queryByRole("combobox", { name: "Review mode" })).not.toBeInTheDocument();
+		await chooseOption(await screen.findByLabelText("Worker agent"), "OpenCode");
+		await chooseOption(screen.getByLabelText("Orchestrator agent"), "OpenCode");
+		await userEvent.click(screen.getByRole("button", { name: "Create and start" }));
+		await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ workerAgent: "opencode", orchestratorAgent: "opencode", trackerIntake: undefined }));
+	});
+
 	it("checks only the selected agent for launch readiness on a remote host", async () => {
 		remote.get.mockResolvedValue({ data: { agents: [agentReadiness("codex")] } });
 		remote.post.mockResolvedValue({ data: { agents: [agentReadiness("codex")] } });
@@ -281,6 +313,7 @@ describe("CreateProjectAgentSheet", () => {
 			agents: [agentReadiness("claude-code", "Claude Code"), agentReadiness("codex", "Codex")],
 		});
 		renderSheet(vi.fn().mockResolvedValue(undefined), queryClient);
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 		const worker = screen.getByRole("combobox", { name: "Worker agent" });
 		expect(worker).toHaveTextContent("Claude Code");
 		await chooseOption(worker, "Codex");
@@ -316,8 +349,9 @@ describe("CreateProjectAgentSheet", () => {
 
 		await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
 		expect(onSubmit).toHaveBeenCalledWith({
-			workerAgent: "claude-code",
+			workerAgent: "codex",
 			orchestratorAgent: "claude-code",
+			reviewMode: "local",
 			trackerIntake: undefined,
 		});
 	});
@@ -334,6 +368,7 @@ describe("CreateProjectAgentSheet", () => {
 			},
 		]);
 		const onSubmit = renderSheet(vi.fn().mockResolvedValue(undefined), queryClient);
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 
 		await userEvent.click(screen.getByRole("button", { name: "Create and start" }));
 
@@ -341,6 +376,7 @@ describe("CreateProjectAgentSheet", () => {
 		expect(onSubmit).toHaveBeenCalledWith({
 			workerAgent: "codex",
 			orchestratorAgent: "claude-code",
+			reviewMode: "pr",
 			trackerIntake: undefined,
 		});
 	});
@@ -353,6 +389,7 @@ describe("CreateProjectAgentSheet", () => {
 			},
 		]);
 		const onSubmit = renderSheet(vi.fn().mockResolvedValue(undefined), queryClient);
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 		await chooseOption(screen.getByLabelText("Worker agent"), "codex");
 
 		queryClient.setQueryData(workspaceQueryKey, [
@@ -377,6 +414,7 @@ describe("CreateProjectAgentSheet", () => {
 
 	it("blocks submit when intake is enabled with no assignee, then passes the intake payload once one is set", async () => {
 		const onSubmit = renderSheet();
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 		await chooseOption(screen.getByLabelText("Worker agent"), "claude-code");
 		await chooseOption(screen.getByLabelText("Orchestrator agent"), "codex");
 
@@ -392,6 +430,7 @@ describe("CreateProjectAgentSheet", () => {
 		expect(onSubmit).toHaveBeenCalledWith({
 			workerAgent: "claude-code",
 			orchestratorAgent: "codex",
+			reviewMode: "pr",
 			trackerIntake: { enabled: true, assignee: "octocat" },
 		});
 	});

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CancelledError, type QueryClient } from "@tanstack/react-query";
 import { Suspense, type ComponentType, type PropsWithChildren } from "react";
@@ -633,8 +635,13 @@ describe("shell workspace startup", () => {
 			body: {
 				path: "/repo/project",
 				asWorkspace: undefined,
+				clonePreparationId: undefined,
 				config: {
 					defaultBranch: "main",
+					reviewMode: "local",
+					reviewers: [{ harness: "claude-code" }],
+					autoReview: false,
+					workersRequestReview: false,
 					worker: { agent: "codex" },
 					orchestrator: { agent: "codex" },
 				},

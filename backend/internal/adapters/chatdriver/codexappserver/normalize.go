@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-9).
+
 package codexappserver
 
 import (
@@ -694,21 +696,67 @@ func normalizeNotification(n notification, now time.Time) []ports.ChatEvent {
 	}
 }
 
-// codexErrorInfo is metadata, not display copy. Only an explicit unauthorized
-// reason invokes the existing authentication path; other errors remain readable.
+// codexErrorInfo is native protocol metadata, never provider prose or model
+// output. Only the explicit unauthorized variant invokes the existing Chat
+// authentication path; allowlisted transport statuses classify workflow access
+// failures without proving the provider process has stopped.
 func codexProviderFailure(turnErr codexproto.TurnError) error {
 	detail := ""
 	if turnErr.AdditionalDetails != nil {
 		detail = *turnErr.AdditionalDetails
 	}
 	var cause error
-	if turnErr.CodexErrorInfo != nil && string(*turnErr.CodexErrorInfo) == `"unauthorized"` {
-		cause = ports.ErrChatAuthRequired
+	var reason domain.ProviderAccessReason
+	if turnErr.CodexErrorInfo != nil {
+		reason, cause = codexAccessReason(*turnErr.CodexErrorInfo)
 	}
-	if strings.TrimSpace(turnErr.Message) == "" && strings.TrimSpace(detail) == "" && cause == nil {
+	if strings.TrimSpace(turnErr.Message) == "" && strings.TrimSpace(detail) == "" && cause == nil && reason == "" {
 		return nil
 	}
-	return ports.NewChatProviderFailure(turnErr.Message, detail, cause)
+	failure := ports.NewChatProviderFailure(turnErr.Message, detail, cause)
+	if reason != "" {
+		return &domain.ProviderAccessError{Reason: reason, Cause: failure}
+	}
+	return failure
+}
+
+// The generated CodexErrorInfo type preserves this externally tagged union as
+// raw JSON. Inspect only known native variants and their integer HTTP status;
+// nested JSON strings and future/ambiguous variants cannot authorize recovery.
+func codexAccessReason(info json.RawMessage) (domain.ProviderAccessReason, error) {
+	var name string
+	if json.Unmarshal(info, &name) == nil {
+		switch name {
+		case "unauthorized":
+			return domain.ProviderAccessAuthentication, ports.ErrChatAuthRequired
+		case "usageLimitExceeded":
+			return domain.ProviderAccessRateLimited, nil
+		default:
+			return "", nil
+		}
+	}
+	var variants map[string]json.RawMessage
+	if json.Unmarshal(info, &variants) == nil && len(variants) == 1 {
+		for name, raw := range variants {
+			if name != "httpConnectionFailed" && name != "responseStreamDisconnected" {
+				return "", nil
+			}
+			var transport struct {
+				HTTPStatusCode *int `json:"httpStatusCode"`
+			}
+			if json.Unmarshal(raw, &transport) == nil && transport.HTTPStatusCode != nil {
+				switch *transport.HTTPStatusCode {
+				case 401:
+					return domain.ProviderAccessAuthentication, nil
+				case 429:
+					return domain.ProviderAccessRateLimited, nil
+				case 502, 503, 504:
+					return domain.ProviderAccessUnavailable, nil
+				}
+			}
+		}
+	}
+	return "", nil
 }
 
 // turnIDFallback reads a top-level turnId, which some builds send instead of

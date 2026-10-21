@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package runtimeselect
 
 import (
@@ -37,6 +39,7 @@ type hybridRuntime struct {
 }
 
 var _ Runtime = (*hybridRuntime)(nil)
+var _ ports.ManagedRuntimeDestroyer = (*hybridRuntime)(nil)
 var _ ports.RuntimeRestarter = (*hybridRuntime)(nil)
 var _ ports.StyledTerminalOutputReader = (*hybridRuntime)(nil)
 var _ ports.SupervisedProcessInspector = (*hybridRuntime)(nil)
@@ -80,6 +83,26 @@ func (r *hybridRuntime) Create(ctx context.Context, cfg ports.RuntimeConfig) (po
 func (r *hybridRuntime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error {
 	backend, raw := r.route(handle)
 	return backend.Destroy(ctx, raw)
+}
+
+// DestroyManaged covers both namespaces Create may use for a new stable ID:
+// the run-file-scoped native host and the private tmux fallback. It never
+// discovers legacy user tmux sessions from an unprefixed candidate ID.
+func (r *hybridRuntime) DestroyManaged(ctx context.Context, handle ports.RuntimeHandle) error {
+	if strings.HasPrefix(handle.ID, directHandlePrefix) {
+		_, raw := r.route(handle)
+		return r.direct.Destroy(ctx, raw)
+	}
+	managed, ok := r.legacy.(ports.ManagedRuntimeDestroyer)
+	if !ok {
+		return fmt.Errorf("%s tmux backend cannot guarantee managed cleanup: %w", r.platform, ports.ErrRuntimeProbeInconclusive)
+	}
+	// Check the fallback first: an unsupported namespace must return before
+	// touching the native host, allowing the caller to retain CLI behavior.
+	if err := managed.DestroyManaged(ctx, handle); err != nil {
+		return err
+	}
+	return r.direct.Destroy(ctx, handle)
 }
 
 func (r *hybridRuntime) IsAlive(ctx context.Context, handle ports.RuntimeHandle) (bool, error) {

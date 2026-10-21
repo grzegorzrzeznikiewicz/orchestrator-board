@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -181,7 +183,7 @@ func (c *Coordinator) decisionCheckpoint(ctx context.Context, id domain.SessionI
 
 // currentEvidence validates the complete chain, not just an approval flag.
 func currentEvidence(s Snapshot) bool {
-	if s.Run == nil || s.Run.Phase != domain.WorkflowReady || s.Run.StopRequested || len(s.Run.TestCommands) == 0 {
+	if s.Run == nil || s.Run.Phase != domain.WorkflowReady || s.Run.StopRequested || len(s.Run.TestCommands) == 0 && (s.Run.VerificationPlan == nil || s.Run.VerificationPlan.Profile != "report" || s.Run.VerificationPlan.Validate() != nil) {
 		return false
 	}
 	test := latestOperation(s.Operations, "tests", s.Run.Cycle)
@@ -231,6 +233,20 @@ func (c *Coordinator) fixInput(ctx context.Context, r domain.LocalWorkflowRun, o
 		if d.Kind == "changes_requested" && d.Cycle == r.Cycle {
 			return d.ID, BuildUserFixPrompt(r, d), nil
 		}
+	}
+	test := latestOperation(ops, "tests", r.Cycle)
+	if test != nil && test.State == "failed" && r.Automatic {
+		results, err := c.deps.Store.ListLocalWorkflowTests(ctx, r.ID)
+		if err != nil {
+			return "", "", err
+		}
+		var detail strings.Builder
+		for _, result := range results {
+			if result.OperationID == test.ID {
+				fmt.Fprintf(&detail, "\n- %s: %s (exit %v)", result.Command, result.Status, result.ExitCode)
+			}
+		}
+		return test.ID, fmt.Sprintf("Continue the original task:\n%s\nLatest user instruction:\n%s\nFix the failed verification checks:%s\nFailure: %s\nInvestigate and correct the implementation or its tests. Do not weaken/skip checks to obtain success. Finish your turn for fresh verification and independent review. Leave changes uncommitted; do not commit, push, publish, merge, deploy or create PRs. Preserve all other user constraints.", r.Task, r.LatestUserPrompt, detail.String(), test.ErrorMessage), nil
 	}
 	review := latestOperation(ops, "review", r.Cycle)
 	if review == nil {

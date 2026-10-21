@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package review
 
 import (
@@ -237,19 +239,30 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	keepGuard = true
 	e.trackLocalRun(run, guard)
 	fail := func(cause error) (TriggerResult, error) {
-		_, updateErr := e.store.UpdateReviewRunResult(ctx, run.ID, domain.ReviewRunFailed, domain.VerdictNone, cause.Error(), "", false)
+		changed, updateErr := e.store.UpdateReviewRunResult(ctx, run.ID, domain.ReviewRunFailed, domain.VerdictNone, cause.Error(), "", false)
 		if updateErr != nil {
-			return TriggerResult{}, fmt.Errorf("%w; record local failure: %w", cause, updateErr)
+			return TriggerResult{Run: run, Created: true}, errors.Join(domain.ErrProviderExecutionUncertain, fmt.Errorf("%w; record local failure: %w", cause, updateErr))
 		}
-		return TriggerResult{}, cause
+		if !changed {
+			return TriggerResult{Run: run, Created: true}, errors.Join(domain.ErrProviderExecutionUncertain, cause, errors.New("local failure was not recorded"))
+		}
+		run.Status, run.Verdict, run.Body = domain.ReviewRunFailed, domain.VerdictNone, cause.Error()
+		return TriggerResult{Run: run, Created: true}, cause
 	}
 	release, err := e.beginHarnessUse(harness)
 	if err != nil {
 		return fail(err)
 	}
 	defer release()
-	if err = e.launcher.Preflight(ctx, harness, snapshot.Path, mode); err != nil {
-		return fail(err)
+	spec := LaunchSpec{Round: round, Task: worker.Metadata.Prompt, LatestUserPrompt: worker.Metadata.LatestUserPrompt, RunID: run.ID, BatchID: run.BatchID, ReviewSessionID: row.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, ProjectEnv: cfg.Env, Harness: harness, AgentConfig: config, WorkspacePath: snapshot.Path, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, InterfaceMode: mode}
+	if opts.WorkflowRun != nil {
+		spec.ProjectEnv = opts.WorkflowRun.Env
+		err = preflightWorkflow(ctx, e.launcher, spec)
+	} else {
+		err = e.launcher.Preflight(ctx, harness, snapshot.Path, mode)
+	}
+	if err != nil {
+		return fail(prelaunchProviderFailure(ctx, err))
 	}
 	latest, ok, err = e.sessions.GetSession(ctx, worker.ID)
 	if err != nil {
@@ -261,7 +274,16 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	if err = guard.Check(ctx); err != nil {
 		return fail(fmt.Errorf("%w: %w", ErrConflict, err))
 	}
-	spec := LaunchSpec{Round: round, Task: worker.Metadata.Prompt, LatestUserPrompt: worker.Metadata.LatestUserPrompt, RunID: run.ID, BatchID: run.BatchID, ReviewSessionID: row.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, ProjectEnv: cfg.Env, Harness: harness, AgentConfig: config, WorkspacePath: snapshot.Path, TargetKind: domain.ReviewTargetLocal, SnapshotID: snapshot.ID, InterfaceMode: mode}
+	if opts.WorkflowRun != nil {
+		spec.VerificationPlan = opts.WorkflowRun.VerificationPlan
+		spec.ExecutionOutput = opts.WorkflowRun.ExecutionOutput
+		if spec.VerificationPlan != nil && spec.VerificationPlan.Profile == "report" {
+			spec.DaemonEvidence, err = e.reportEvidence(ctx, *opts.WorkflowRun, run)
+			if err != nil {
+				return fail(err)
+			}
+		}
+	}
 	if err := ctx.Err(); err != nil {
 		return fail(err)
 	}
@@ -274,7 +296,7 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	}
 	launch, err := e.launcher.Spawn(ctx, spec)
 	if err != nil {
-		return fail(fmt.Errorf("launch local reviewer: %w", err))
+		return fail(errors.Join(domain.ErrProviderExecutionUncertain, fmt.Errorf("launch local reviewer: %w", err)))
 	}
 	row.ReviewerHandleID = launch.HandleID
 	row.AgentSessionID = launch.AgentSessionID
@@ -283,11 +305,11 @@ func (e *Engine) triggerLocalLocked(ctx context.Context, worker domain.SessionRe
 	}
 	if err := e.store.UpsertReview(ctx, row); err != nil {
 		_ = e.launcher.Destroy(ctx, launch.HandleID)
-		return fail(err)
+		return fail(errors.Join(domain.ErrProviderExecutionUncertain, err))
 	}
 	state, err := e.listLocalLocked(ctx, worker, harness)
 	if err != nil {
-		return TriggerResult{}, err
+		return TriggerResult{Run: run, Created: true}, errors.Join(domain.ErrProviderExecutionUncertain, err)
 	}
 	return TriggerResult{Run: run, Created: true, CreatedRuns: []domain.ReviewRun{run}, Reviews: state.Reviews, Runs: state.Runs, ReviewerHandleID: legacyReviewerHandle(row), ReviewerSurface: reviewerSurface(row)}, nil
 }
@@ -396,17 +418,8 @@ func (e *Engine) validateLocalRunLocked(ctx context.Context, run domain.ReviewRu
 		reason = "Local review observation was interrupted by a restart"
 	}
 	if reason == "" && guard != nil {
-		if err = guard.Check(ctx); err != nil {
+		if err = guard.CheckSnapshot(ctx, worker.Metadata.WorkspacePath, run.SnapshotID, run.SnapshotObservation); err != nil {
 			reason = "Workspace changed during or after local review"
-		}
-	}
-	if reason == "" {
-		manifest, captureErr := localsnapshot.Capture(ctx, worker.Metadata.WorkspacePath)
-		if captureErr != nil {
-			reason = "Workspace cannot be verified"
-		} else if manifest.ID != run.SnapshotID || manifest.ObservationID != run.SnapshotObservation {
-			reason = "Workspace changed since the local snapshot"
-
 		}
 	}
 	if reason == "" {

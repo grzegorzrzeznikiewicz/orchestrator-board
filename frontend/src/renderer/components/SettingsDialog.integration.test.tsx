@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
@@ -172,6 +174,7 @@ describe("Settings recovery modal integration", () => {
 
 	it("allows pointer interaction above create-project and restores its selections and intake draft on close", async () => {
 		const client = renderDialogs("create-project");
+		await userEvent.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 		await userEvent.click(screen.getByRole("combobox", { name: "Worker agent" }));
 		await userEvent.click(await screen.findByRole("option", { name: /Codex/i }));
 		await userEvent.click(screen.getByLabelText("Automatically work on assigned issues"));
@@ -186,6 +189,7 @@ describe("Settings recovery modal integration", () => {
 		await userEvent.click(screen.getByRole("button", { name: "Back" }));
 
 		expect(await screen.findByRole("combobox", { name: "Worker agent" })).toHaveTextContent("Codex");
+		expect(screen.getByRole("combobox", { name: "Review mode" })).toHaveValue("pr");
 		expect(screen.getByLabelText("Assignee")).toHaveValue("octocat");
 		expect(useUiStore.getState().settingsModal).toBeNull();
 		await userEvent.keyboard("{Escape}");

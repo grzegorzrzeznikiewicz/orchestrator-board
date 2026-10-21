@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package review
 
 import (
@@ -65,6 +67,9 @@ type Launcher interface {
 
 // LaunchSpec is the engine's request to (re)launch a reviewer for one pass.
 type LaunchSpec struct {
+	DaemonEvidence   *LocalReviewEvidence
+	VerificationPlan *domain.LocalVerificationPlan
+	ExecutionOutput  string
 	Round            int
 	Task             string
 	LatestUserPrompt string
@@ -230,6 +235,10 @@ func NewLauncher(reviewers ports.ReviewerResolver, rt reviewerRuntime, dataDir s
 // executable. The only difference from Spawn is that Preflight stops before
 // runtime.Create().
 func (l *agentLauncher) Preflight(ctx context.Context, harness domain.ReviewerHarness, workspacePath string, mode ...domain.ReviewerInterfaceMode) error {
+	return l.preflight(ctx, harness, workspacePath, false, mode...)
+}
+
+func (l *agentLauncher) preflight(ctx context.Context, harness domain.ReviewerHarness, workspacePath string, exactAuthorized bool, mode ...domain.ReviewerInterfaceMode) error {
 	reviewer, ok := l.reviewers.Reviewer(harness)
 	if !ok {
 		return fmt.Errorf("no reviewer adapter for harness %q", harness)
@@ -259,9 +268,12 @@ func (l *agentLauncher) Preflight(ctx context.Context, harness domain.ReviewerHa
 	if _, err := exec.LookPath(bin); err != nil {
 		return fmt.Errorf("reviewer binary %q not found: %w", bin, err)
 	}
-	authStatus, authKnown, err := l.agentAuthStatus(ctx, harness)
-	if err != nil {
-		return err
+	authStatus, authKnown := ports.AgentAuthStatusAuthorized, true
+	if !exactAuthorized {
+		authStatus, authKnown, err = l.agentAuthStatus(ctx, harness)
+		if err != nil {
+			return err
+		}
 	}
 	if authKnown && authStatus == ports.AgentAuthStatusUnauthorized {
 		return fmt.Errorf("reviewer harness %q: %w", harness, ports.ErrChatAuthRequired)
@@ -560,8 +572,22 @@ func (l *agentLauncher) launchReviewerTerminalWithMode(ctx context.Context, spec
 	// handle first so the reviewer always (re)launches under spec.Harness's
 	// sandbox/permissions/env — which are applied only here at Create, never by
 	// Notify. Destroy is idempotent when no pane exists (first spawn / dead pane).
-	if err := l.runtime.Destroy(ctx, ports.RuntimeHandle{ID: handleID}); err != nil {
-		return LaunchResult{}, fmt.Errorf("reviewer replace stale pane: %w", err)
+	var cleanupErr error
+	if managed, ok := l.runtime.(ports.ManagedRuntimeDestroyer); ok && !restoring && spec.TargetKind == domain.ReviewTargetLocal {
+		// Local snapshot review already destroys its durable previous handle
+		// before Spawn. This remaining cleanup only concerns the new managed
+		// namespace; PR replacement and restore retain legacy-aware teardown.
+		cleanupErr = managed.DestroyManaged(ctx, ports.RuntimeHandle{ID: handleID})
+		if errors.Is(cleanupErr, ports.ErrManagedRuntimeUnsupported) {
+			// A CLI daemon without a configured private namespace keeps its
+			// established teardown policy. Probe failures never take this path.
+			cleanupErr = l.runtime.Destroy(ctx, ports.RuntimeHandle{ID: handleID})
+		}
+	} else {
+		cleanupErr = l.runtime.Destroy(ctx, ports.RuntimeHandle{ID: handleID})
+	}
+	if cleanupErr != nil {
+		return LaunchResult{}, fmt.Errorf("reviewer replace stale pane: %w", cleanupErr)
 	}
 	workingDirectory := cmd.WorkingDirectory
 	if workingDirectory == "" {

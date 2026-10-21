@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package specgen builds the code-first OpenAPI document from the Go contract
 // types. It lives outside apispec because it imports the controllers (to
 // reflect their request/response shapes), and controllers import apispec (for
@@ -155,6 +157,14 @@ func schemaName(_ reflect.Type, defaultName string) string {
 // by projectOperations(). Add an entry when a new contract type is introduced;
 // the drift test fails until the spec is regenerated, which flags the gap.
 var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names include reset-credit contracts; no credential value is stored here.
+	"DomainLocalVerificationPlan":                          "LocalVerificationPlan",
+	"LocalworkflowCardSummary":                             "LocalWorkflowCardSummary",
+	"LocalworkflowCardRun":                                 "LocalWorkflowCardRun",
+	"ControllersLocalWorkflowSummariesResponse":            "LocalWorkflowSummariesResponse",
+	"ControllersLocalWorkflowSummariesQuery":               "LocalWorkflowSummariesQuery",
+	"LocalworkflowAutomationState":                         "LocalWorkflowAutomationState",
+	"DomainProviderAccessReason":                           "ProviderAccessReason",
+	"DomainLocalWorkflowProviderRetry":                     "LocalWorkflowProviderRetry",
 	"DomainLocalWorkflowRun":                               "LocalWorkflowRun",
 	"DomainLocalWorkflowOperation":                         "LocalWorkflowOperation",
 	"DomainLocalWorkflowTestResult":                        "LocalWorkflowTestResult",
@@ -3399,6 +3409,7 @@ func localWorkflowOperations() []operation {
 	base := "/api/v1/sessions/{sessionId}/local-workflow"
 	errorResponses := []respUnit{{http.StatusBadRequest, envelope.APIError{}}, {http.StatusNotFound, envelope.APIError{}}, {http.StatusConflict, envelope.APIError{}}, {http.StatusUnprocessableEntity, envelope.APIError{}}, {http.StatusInternalServerError, envelope.APIError{}}, {http.StatusNotImplemented, envelope.APIError{}}}
 	operations := []operation{
+		{method: http.MethodGet, path: "/api/v1/local-workflow/summaries", id: "getLocalWorkflowSummaries", summary: "Read bounded local workflow display cards", tag: "reviews", pathParams: []any{controllers.LocalWorkflowSummariesQuery{}}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowSummariesResponse{}}}},
 		{method: http.MethodGet, path: base, id: "getLocalWorkflow", summary: "Read local workflow execution facts", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
 		{method: http.MethodPost, path: base + "/start", id: "startLocalWorkflow", summary: "Start an explicit local workflow", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StartLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},
 		{method: http.MethodPost, path: base + "/stop", id: "stopLocalWorkflow", summary: "Stop local workflow execution", tag: "reviews", pathParams: []any{controllers.SessionIDParam{}}, reqBody: controllers.StopLocalWorkflowRequest{}, resps: []respUnit{{http.StatusOK, controllers.LocalWorkflowResponse{}}}},

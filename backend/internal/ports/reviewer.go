@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package ports
 
 import (
@@ -26,6 +28,13 @@ type Reviewer interface {
 // without this capability keep the terminal launch path.
 type ReviewerChatProfile interface {
 	ReviewChatHarness() domain.AgentHarness
+}
+
+// ReviewerLaunchAuthValidator validates the exact launch credential with a fresh
+// provider round-trip. Local credential presence and cached success are not proof.
+// Diagnostics contain authored codes/statuses, never credentials or raw output.
+type ReviewerLaunchAuthValidator interface {
+	ValidateReviewLaunchAuth(context.Context, string, map[string]string) (AgentAuthStatus, []domain.AgentAuthDiagnostic, error)
 }
 
 // ReviewCancelMode names how AO should stop a running reviewer.

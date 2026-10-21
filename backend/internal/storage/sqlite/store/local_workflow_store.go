@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package store
 
 import (
@@ -15,6 +17,7 @@ import (
 
 // Private execution inputs are persisted separately from the public JSON view.
 type workflowRecord struct {
+	ExecutionOutput         string
 	VerificationAfterTurnID string
 	ReviewerConfig          domain.AgentConfig
 	domain.LocalWorkflowRun
@@ -50,7 +53,7 @@ func workflowNullTime(t *time.Time) sql.NullTime {
 }
 
 func encodeWorkflow(r domain.LocalWorkflowRun) (string, error) {
-	b, e := json.Marshal(workflowRecord{VerificationAfterTurnID: r.VerificationAfterTurnID, ReviewerConfig: r.ReviewerConfig, LocalWorkflowRun: r, Request: r.RequestID, TaskText: r.Task, LatestPrompt: r.LatestUserPrompt, Environment: r.Env, Workspace: r.WorkspacePath, Generation: r.WorkerGeneration})
+	b, e := json.Marshal(workflowRecord{ExecutionOutput: r.ExecutionOutput, VerificationAfterTurnID: r.VerificationAfterTurnID, ReviewerConfig: r.ReviewerConfig, LocalWorkflowRun: r, Request: r.RequestID, TaskText: r.Task, LatestPrompt: r.LatestUserPrompt, Environment: r.Env, Workspace: r.WorkspacePath, Generation: r.WorkerGeneration})
 	return string(b), e
 }
 func decodeWorkflow(row gen.LocalWorkflow) (domain.LocalWorkflowRun, error) {
@@ -59,6 +62,7 @@ func decodeWorkflow(row gen.LocalWorkflow) (domain.LocalWorkflowRun, error) {
 		return domain.LocalWorkflowRun{}, e
 	}
 	r := p.LocalWorkflowRun
+	r.ExecutionOutput = p.ExecutionOutput
 	r.VerificationAfterTurnID = p.VerificationAfterTurnID
 	r.ReviewerConfig = p.ReviewerConfig
 	r.RequestID = p.Request

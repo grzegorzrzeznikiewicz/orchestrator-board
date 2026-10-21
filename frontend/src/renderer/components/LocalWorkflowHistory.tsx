@@ -1,5 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useTranslation } from "react-i18next";
 import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
+import { LocalWorkflowProviderRetry } from "./LocalWorkflowProviderRetry";
 
 type TestResult = NonNullable<LocalWorkflowSnapshot["tests"]>[number];
 export function WorkflowTestResult({
@@ -47,6 +50,35 @@ export function LocalWorkflowHistory({
 	return (
 		<section aria-label={t("localWorkflow.history")} className="space-y-3">
 			<h4 className="font-medium">{t("localWorkflow.history")}</h4>
+			{!!data.previousRuns?.length && (
+				<details className="space-y-2 rounded border border-border p-2">
+					<summary className="cursor-pointer font-medium">
+						{t("localWorkflow.previousRuns", { count: data.previousRuns.length })}
+					</summary>
+					<p className="text-muted-foreground">
+						{t("localWorkflow.previousRunsDescription")}
+					</p>
+					{data.previousRuns.map((previous) => (
+						<article key={previous.id} className="space-y-1 border-l border-border pl-2">
+							<code className="break-all">{previous.id}</code>
+							<p>
+								<time dateTime={previous.createdAt}>
+									{new Date(previous.createdAt).toLocaleString()}
+								</time>
+							</p>
+							<p>{t(`localWorkflow.phase.${previous.phase}`)}</p>
+							<p>{t("localWorkflow.cycle", { cycle: previous.cycle, limit: previous.maxRounds })}</p>
+							{previous.verificationPlan && (
+								<p>{t(`localWorkflow.profile.${previous.verificationPlan.profile}`)}</p>
+							)}
+							<LocalWorkflowProviderRetry retry={previous.providerRetry} historical />
+							{previous.blockMessage && !(previous.blockCode === "provider_waiting" && previous.providerRetry) && (
+								<p className="whitespace-pre-wrap break-words text-warning">{previous.blockMessage}</p>
+							)}
+						</article>
+					))}
+				</details>
+			)}
 			{(data.decisions ?? []).length > 0 && (
 				<section
 					aria-label={t("localWorkflow.decisions")}
@@ -99,6 +131,12 @@ export function LocalWorkflowHistory({
 					{operations
 						.filter((op) => op.cycle === cycle)
 						.map((op) => {
+							const reportCheckpoint =
+								op.kind === "tests" &&
+								op.cycle === data.run?.cycle &&
+								data.run.verificationPlan?.profile === "report" &&
+								!data.run.testCommands?.length &&
+								!(data.tests ?? []).some((test) => test.operationId === op.id);
 							const review = (data.reviews ?? []).find(
 								(review) => review.id === op.reviewRunId,
 							);
@@ -108,7 +146,11 @@ export function LocalWorkflowHistory({
 									className="space-y-2 border-l border-border pl-2"
 								>
 									<p>
-										{t(`localWorkflow.operation.${op.kind}`)} ·{" "}
+										{t(
+											reportCheckpoint
+												? "localWorkflow.verificationCheckpoint"
+												: `localWorkflow.operation.${op.kind}`,
+										)} ·{" "}
 										{t("localWorkflow.attempt", { attempt: op.attempt })} ·{" "}
 										{t(`localWorkflow.operationState.${op.state}`)}
 									</p>
@@ -152,6 +194,9 @@ export function LocalWorkflowHistory({
 													/>
 												))}
 										</ul>
+									)}
+									{reportCheckpoint && (
+										<p>{t("localWorkflow.reportTestsNotApplicable")}</p>
 									)}
 									{review && (
 										<div className="space-y-2">

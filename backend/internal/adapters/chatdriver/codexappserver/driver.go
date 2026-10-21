@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-9).
+
 package codexappserver
 
 import (
@@ -322,7 +324,22 @@ func (d *Driver) Start(ctx context.Context, cfg ports.ChatStartConfig) (ports.Ch
 	// thread/start has no top-level effort field either; carry the durable AO
 	// choice as a config override like thread/resume does, so a fresh thread
 	// does not silently fall back to the provider default.
-	if config := threadConfig(cfg.Effort, cfg.MCPServers); len(config) > 0 {
+	config := threadConfig(cfg.Effort, cfg.MCPServers)
+	if cfg.Ephemeral && cfg.ReadOnly && cfg.DisableNetwork {
+		readCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+		restricted, isolationErr := backgroundThreadConfig(readCtx, conv.conn, cfg.WorkspacePath, cfg.MCPServers)
+		cancel()
+		if isolationErr != nil {
+			if cleanupErr := conv.Terminate(); cleanupErr != nil {
+				return nil, errors.Join(isolationErr, fmt.Errorf("%w: %w", domain.ErrProviderExecutionUncertain, cleanupErr))
+			}
+			return nil, isolationErr
+		}
+		for key, value := range restricted {
+			config[key] = value
+		}
+	}
+	if len(config) > 0 {
 		params["config"] = config
 	}
 	if cfg.SystemPrompt != "" {

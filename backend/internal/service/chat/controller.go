@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package chat owns the daemon side of a Chat-mode session: one controller per
 // session, the projection of provider events into durable conversation rows, and
 // the typed commands a client can issue against it.
@@ -1470,19 +1472,29 @@ func (c *Controller) sendLocked(
 		created bool
 		err     error
 	)
+	var releaseInput func()
+	defer func() {
+		if releaseInput != nil {
+			releaseInput()
+		}
+	}()
 	if c.reviewID == "" {
 		if admission, ok := c.store.(ports.LocalReviewWorkspace); ok {
 			release, lockErr := admission.AcquireLocalReviewWorkspace(ctx, c.sessionID)
 			if lockErr != nil {
 				return domain.ConversationTurn{}, lockErr
 			}
-			defer release()
+			releaseInput = release
 		}
 	}
 	if c.reviewID == "" {
 		created, err = c.store.AppendUserMessage(ctx, c.conversation.ID, c.sessionID, c.generation, record, turnID, now)
 	} else {
 		created, err = c.store.AppendReviewUserMessage(ctx, c.conversation.ID, c.sessionID, c.reviewID, c.generation, record, turnID, now)
+	}
+	if releaseInput != nil {
+		releaseInput()
+		releaseInput = nil
 	}
 	if err != nil {
 		return domain.ConversationTurn{}, fmt.Errorf("record user message: %w", err)
@@ -1514,7 +1526,7 @@ func (c *Controller) sendLocked(
 	}
 
 	turn, err := c.dispatch(ctx, turnID, msg, now)
-	dispatched = err == nil
+	dispatched = err == nil && turn.State != domain.TurnStateQueued
 	return turn, err
 }
 
@@ -1776,6 +1788,26 @@ func (c *Controller) dispatch(
 	msg ports.ChatUserMessage,
 	requestedAt time.Time,
 ) (domain.ConversationTurn, error) {
+	if c.reviewID == "" {
+		if admission, ok := c.store.(ports.LocalReviewWorkspace); ok {
+			release, err := admission.AcquireLocalReviewWorkspace(ctx, c.sessionID)
+			if err != nil {
+				return domain.ConversationTurn{}, err
+			}
+			defer release()
+		}
+		if gate, ok := c.store.(interface {
+			CheckLocalWorkflowWorkerAdmission(context.Context, domain.SessionID) error
+		}); ok {
+			if err := gate.CheckLocalWorkflowWorkerAdmission(ctx, c.sessionID); err != nil {
+				if errors.Is(err, domain.ErrLocalWorkflowConflict) {
+					c.clearSendingTurn(turnID)
+					return domain.ConversationTurn{ID: turnID, ConversationID: c.conversation.ID, HandledBySessionID: c.sessionID, State: domain.TurnStateQueued, RequestedAt: requestedAt}, nil
+				}
+				return domain.ConversationTurn{}, err
+			}
+		}
+	}
 	// Every dispatch carries the conversation's choices, including one AO makes on
 	// the user's behalf: a queued message draining, or a relay from `ao send`. A
 	// setting that only applied when the user pressed send would silently stop

@@ -413,6 +413,17 @@ type LocalWorkflowDecision struct {
 	RecordJson string
 }
 
+type LocalWorkflowIntent struct {
+	SessionID  string
+	RequestID  string
+	Prompt     string
+	TurnID     string
+	State      string
+	WorkflowID string
+	CreatedAt  time.Time
+	ConsumedAt sql.NullTime
+}
+
 type LocalWorkflowOperation struct {
 	ID              string
 	WorkflowID      string

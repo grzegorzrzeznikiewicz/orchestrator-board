@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import {
 	canSubmitProjectSetup,
 	ProjectSetupFormView,
@@ -39,6 +41,7 @@ import { Button } from "./ui/button";
 type TrackerIntakeConfig = components["schemas"]["TrackerIntakeConfig"];
 
 export type CreateProjectAgentSelection = {
+	reviewMode?: "local" | "pr";
 	workerAgent: string;
 	orchestratorAgent: string;
 	trackerIntake?: TrackerIntakeConfig;
@@ -168,6 +171,8 @@ export function CreateProjectAgentSheet({
 			: t("createProject.couldNotLoadAgents")
 		: null;
 	const displayError = agentsError ?? (hostId && agents && selectableAgents.length === 0 ? t("agentSelector.noneReady") : null);
+	const [reviewMode, setReviewMode] = useState<"local" | "pr">("local");
+	const localWorkflow = !hostId && reviewMode === "local";
 	const [workerAgent, setWorkerAgent] = useState("");
 	const [orchestratorAgent, setOrchestratorAgent] = useState("");
 	const [workerAgentTouched, setWorkerAgentTouched] = useState(false);
@@ -202,6 +207,7 @@ export function CreateProjectAgentSheet({
 
 	useEffect(() => {
 		if (open && !wasOpen.current) {
+			setReviewMode("local");
 			setWorkerAgent("");
 			setOrchestratorAgent("");
 			setWorkerAgentTouched(false);
@@ -213,13 +219,15 @@ export function CreateProjectAgentSheet({
 
 	useEffect(() => {
 		if (!open) return;
-		if (!workerAgentTouched) {
+		if (localWorkflow) {
+			setWorkerAgent("codex");
+		} else if (!workerAgentTouched) {
 			setWorkerAgent(defaultAuthorizedAgentForRole(authorizedAgents, sessionHistory, "worker"));
 		}
 		if (!orchestratorAgentTouched) {
 			setOrchestratorAgent(defaultAuthorizedAgentForRole(authorizedAgents, sessionHistory, "orchestrator"));
 		}
-	}, [authorizedAgents, open, orchestratorAgentTouched, sessionHistory, workerAgentTouched]);
+	}, [authorizedAgents, localWorkflow, open, orchestratorAgentTouched, sessionHistory, workerAgentTouched]);
 
 	if (isBusy) return null;
 
@@ -268,6 +276,19 @@ export function CreateProjectAgentSheet({
 								: t("createProject.setupProject")
 						}
 					/>
+					{!hostId && (
+						<div className="space-y-2 border-b border-border p-4">
+							<Label htmlFor="newProjectReviewMode">{t("settings.project.reviewMode")}</Label>
+							<select id="newProjectReviewMode" className="agents-sheet-control w-full rounded-md border border-input bg-background px-2 py-1 text-sm" value={reviewMode} onChange={(event) => {
+								setReviewMode(event.target.value as "local" | "pr");
+								setWorkerAgentTouched(false);
+							}}>
+								<option value="local">{t("createProject.localWorkflow", { defaultValue: "Local workflow" })}</option>
+								<option value="pr">{t("settings.project.prReview")}</option>
+							</select>
+							{localWorkflow && <p className="text-xs text-muted-foreground">{t("createProject.localWorkflowDescription", { defaultValue: "Codex implements changes and Claude reviews locally. Configure test commands in project settings before starting tasks." })}</p>}
+						</div>
+					)}
 					<ProjectSetupFormView
 						agentControls={{
 							worker: (
@@ -277,7 +298,7 @@ export function CreateProjectAgentSheet({
 									placeholder={t("createProject.selectWorker")}
 									value={workerAgent}
 									agents={selectableAgents}
-									disabled={isLoadingAgents}
+									disabled={isLoadingAgents || localWorkflow}
 									labelClassName="agents-sheet-label"
 									triggerClassName="agents-sheet-control"
 									contentClassName="agents-sheet-menu"
@@ -347,7 +368,7 @@ export function CreateProjectAgentSheet({
 						isBusy={isBusy}
 						onCancel={() => onOpenChange(false)}
 						onSubmit={() =>
-							void onSubmit({ workerAgent, orchestratorAgent, trackerIntake: intakeVisible ? buildIntake(intake) : undefined })
+							void onSubmit({ workerAgent, orchestratorAgent, ...(!hostId ? { reviewMode } : {}), trackerIntake: intakeVisible ? buildIntake(intake) : undefined })
 						}
 						setupNotice={
 							repositorySetupNeeded

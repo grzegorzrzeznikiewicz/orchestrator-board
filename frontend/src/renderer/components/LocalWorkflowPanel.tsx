@@ -1,6 +1,9 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { aoBridge } from "../lib/bridge";
 import { useQuery } from "@tanstack/react-query";
 import { LocalWorkflowHistory } from "./LocalWorkflowHistory";
+import { LocalWorkflowProviderRetry } from "./LocalWorkflowProviderRetry";
 import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +22,12 @@ export function LocalWorkflowPanel({
   const { query, action } = useLocalWorkflow(sessionId, hostId);
   const data = query.data;
   const run = data?.run;
+  const automationPending = data?.automation?.pending === true;
+  const planning =
+    run?.automatic &&
+    run.phase === "waiting_executor" &&
+    ["pending", "running"].includes(run.planState ?? "");
+  const plan = run?.verificationPlan;
   const [limit, setLimit] = useState(3);
   const feedbackOwner = JSON.stringify([
     sessionId,
@@ -37,6 +46,7 @@ export function LocalWorkflowPanel({
     .find((op) => op.kind === "review" && op.cycle === run?.cycle);
   const canDecide =
     desktop &&
+    !automationPending &&
     run?.phase === "ready" &&
     data?.current &&
     !data.requiredFindings.length &&
@@ -88,6 +98,7 @@ export function LocalWorkflowPanel({
   }, [run?.id, run?.blockCode, run?.maxRounds]);
   const error = action.error ?? (log ? logQuery.error : null) ?? query.error;
   const canResume = !!run && ["blocked", "stopped"].includes(run.phase);
+  const resumeUncertain = ["provider_execution_uncertain", "provider_uncertain", "review_uncertain"].includes(run?.blockCode ?? "");
   const limited = run?.blockCode === "round_limit";
   function showLog(
     test: NonNullable<LocalWorkflowSnapshot["tests"]>[number],
@@ -113,7 +124,15 @@ export function LocalWorkflowPanel({
         </p>
       )}
       {query.isLoading && <p>{t("localWorkflow.loading")}</p>}
-      {!query.isLoading && !run && !query.error && (
+      {automationPending && (
+        <p role="status">{t("localWorkflow.automationPending")}</p>
+      )}
+      {automationPending && data.automation?.blockMessage && (
+        <p role="alert" className="break-words text-warning">
+          {data.automation.blockMessage}
+        </p>
+      )}
+      {!query.isLoading && !run && !automationPending && !query.error && (
         <Button
           size="sm"
           disabled={action.isPending}
@@ -122,26 +141,76 @@ export function LocalWorkflowPanel({
           {t("localWorkflow.start")}
         </Button>
       )}
-      {run && (
+      {run && !automationPending && (
         <>
           <p role="status">
-            {t(`localWorkflow.phase.${run.phase}`)} ·{" "}
+            {t(
+              planning
+                ? "localWorkflow.planning"
+                : `localWorkflow.phase.${run.phase}`,
+            )} ·{" "}
             {t("localWorkflow.cycle", {
               cycle: run.cycle,
               limit: run.maxRounds,
             })}
           </p>
-          {run.blockCode && (
+          {plan && (
+            <section
+              aria-label={t("localWorkflow.verificationPlan")}
+              className="space-y-2 rounded border border-border p-2"
+            >
+              <h4 className="font-medium">
+                {t("localWorkflow.verificationPlan")}
+              </h4>
+              <p>{t(`localWorkflow.profile.${plan.profile}`)}</p>
+              <p className="whitespace-pre-wrap break-words">
+                {plan.rationale}
+              </p>
+              {!!plan.commands?.length && (
+                <>
+                  <h5 className="font-medium">{t("localWorkflow.planCommands")}</h5>
+                  <ul className="space-y-1">
+                    {plan.commands.map((command, i) => (
+                      <li key={i}>
+                        <code className="whitespace-pre-wrap break-all">
+                          {command}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {plan.profile === "report" && !run.testCommands?.length && (
+                <p>{t("localWorkflow.reportTestsNotApplicable")}</p>
+              )}
+              {!!plan.checks?.length && (
+                <>
+                  <h5 className="font-medium">{t("localWorkflow.planChecks")}</h5>
+                  <ul className="list-disc space-y-1 pl-4">
+                    {plan.checks.map((check, i) => (
+                      <li key={i} className="whitespace-pre-wrap break-words">
+                        {check}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </section>
+          )}
+          <LocalWorkflowProviderRetry retry={run.providerRetry} historical={Boolean(run.closedAt || run.phase === "stopped" || ((run.stopRequested || run.phase === "stopping") && run.providerRetry?.state !== "uncertain"))} />
+          {run.blockCode && !(run.blockCode === "provider_waiting" && run.providerRetry) && (
             <code className="break-all text-warning">{run.blockCode}</code>
           )}
-          {run.blockMessage && (
+          {run.blockMessage && !(run.blockCode === "provider_waiting" && run.providerRetry) && (
             <p className="text-warning">{run.blockMessage}</p>
           )}
           {run.phase === "ready" && (
             <p>
               {t(
                 data?.current
-                  ? "localWorkflow.readyDescription"
+                  ? plan?.profile === "report" && !run.testCommands?.length
+                    ? "localWorkflow.reportReadyDescription"
+                    : "localWorkflow.readyDescription"
                   : "localWorkflow.stale",
               )}
             </p>
@@ -226,6 +295,7 @@ export function LocalWorkflowPanel({
                 size="sm"
                 disabled={
                   action.isPending ||
+                  resumeUncertain ||
                   (limited &&
                     (!Number.isInteger(limit) || limit <= run.maxRounds))
                 }
@@ -253,6 +323,10 @@ export function LocalWorkflowPanel({
               ))}
             </ul>
           )}
+        </>
+      )}
+      {(run || !!data?.previousRuns?.length) && (
+        <>
           {data && <LocalWorkflowHistory data={data} onShowLog={showLog} />}
           {log && (
             <p>

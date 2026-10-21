@@ -828,6 +828,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/local-workflow/summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded local workflow display cards */
+        get: operations["getLocalWorkflowSummaries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mobile/devices": {
         parameters: {
             query?: never;
@@ -5190,6 +5207,47 @@ export interface components {
             summary: string;
             version: number;
         };
+        LocalVerificationPlan: {
+            checks: string[];
+            commands: string[];
+            /** @enum {string} */
+            profile: "implementation" | "report";
+            rationale: string;
+        };
+        LocalWorkflowAutomationState: {
+            blockMessage?: string;
+            pending: boolean;
+        };
+        LocalWorkflowCardRun: {
+            automatic?: boolean;
+            blockCode?: string;
+            blockMessage?: string;
+            cycle: number;
+            id: string;
+            maxRounds: number;
+            /** @enum {string} */
+            phase: "waiting_executor" | "testing" | "reviewing" | "fixing" | "ready" | "blocked" | "stopping" | "stopped";
+            planState?: string;
+            profile?: string;
+            providerRetry?: components["schemas"]["LocalWorkflowProviderRetry"];
+            /** Format: int64 */
+            version: number;
+        };
+        LocalWorkflowCardSummary: {
+            accepted: boolean;
+            automation: components["schemas"]["LocalWorkflowAutomationState"];
+            current: boolean;
+            requiredCount: number;
+            requiredReason?: string;
+            run: null | components["schemas"]["LocalWorkflowCardRun"];
+            sessionId: string;
+            /** @enum {string} */
+            stage: "executing" | "testing" | "local_review" | "fixing" | "awaiting_acceptance" | "accepted";
+            testsPassed: number;
+            testsPresent: boolean;
+            testsQueued: boolean;
+            testsTotal: number;
+        };
         LocalWorkflowDecision: {
             comment: string;
             /** Format: date-time */
@@ -5228,11 +5286,32 @@ export interface components {
             workerTurnId?: string;
             workflowId: string;
         };
+        LocalWorkflowProviderRetry: {
+            attempt: number;
+            attemptId?: string;
+            contextId?: string;
+            /** Format: date-time */
+            failureAt: string;
+            /** Format: date-time */
+            lastAt?: null | string;
+            maxAttempts: number;
+            /** Format: date-time */
+            nextAt?: null | string;
+            operationId?: string;
+            /** @enum {string} */
+            reason: "authentication" | "rate_limited" | "unavailable";
+            /** @enum {string} */
+            stage: "planner" | "review";
+            /** @enum {string} */
+            state: "waiting" | "checking" | "recovered" | "exhausted" | "uncertain";
+        };
         LocalWorkflowResponse: {
             accepted: boolean;
+            automation?: components["schemas"]["LocalWorkflowAutomationState"];
             current: boolean;
             decisions: components["schemas"]["LocalWorkflowDecision"][];
             operations: components["schemas"]["LocalWorkflowOperation"][];
+            previousRuns?: components["schemas"]["LocalWorkflowRun"][];
             requiredFindings: components["schemas"]["LocalReviewFinding"][];
             reviews: components["schemas"]["ReviewRun"][];
             run: null | components["schemas"]["LocalWorkflowRun"];
@@ -5241,6 +5320,7 @@ export interface components {
             tests: components["schemas"]["LocalWorkflowTestResult"][];
         };
         LocalWorkflowRun: {
+            automatic?: boolean;
             blockCode?: string;
             blockMessage?: string;
             /** Format: date-time */
@@ -5252,13 +5332,19 @@ export interface components {
             maxRounds: number;
             /** @enum {string} */
             phase: "waiting_executor" | "testing" | "reviewing" | "fixing" | "ready" | "blocked" | "stopping" | "stopped";
+            planState?: string;
+            providerRetry?: components["schemas"]["LocalWorkflowProviderRetry"];
             sessionId: string;
             stopRequested: boolean;
             testCommands: string[];
             /** Format: date-time */
             updatedAt: string;
+            verificationPlan?: components["schemas"]["LocalVerificationPlan"];
             /** Format: int64 */
             version: number;
+        };
+        LocalWorkflowSummariesResponse: {
+            summaries: components["schemas"]["LocalWorkflowCardSummary"][];
         };
         LocalWorkflowTestLogResponse: {
             text: string;
@@ -9709,6 +9795,82 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    getLocalWorkflowSummaries: {
+        parameters: {
+            query: {
+                sessionIds: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkflowSummariesResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

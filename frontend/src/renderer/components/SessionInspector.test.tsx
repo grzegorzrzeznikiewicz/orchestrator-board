@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -69,8 +71,9 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
 
+const previewModeState = vi.hoisted(() => ({ enabled: false }));
 vi.mock("../lib/preview-mode", () => ({
-  usesPreviewWorkspaceData: false,
+  get usesPreviewWorkspaceData() { return previewModeState.enabled; },
 }));
 
 vi.mock("../lib/api-client", () => ({
@@ -315,6 +318,7 @@ const reviewState = (n: number, status: string, targetSha = `sha-${n}`) => ({
 });
 
 beforeEach(() => {
+  previewModeState.enabled = false;
   cloudCpMock.cancelSessionReviews.mockReset();
   cloudCpMock.getSessionReviewState.mockReset();
   cloudCpMock.inspectSessionReviewerHarnesses.mockReset();
@@ -4284,6 +4288,38 @@ describe("SessionInspector summary reviews", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Run local review" }));
     await waitFor(() => expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/trigger")).toHaveLength(1));
     expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/trigger")[0][1].body.prUrl).toBeUndefined();
+  });
+
+  it("preserves configured Local review in preview across refetch and remount", async () => {
+    previewModeState.enabled = true;
+    const config = { reviewMode: "local", worker: { agent: "codex" }, reviewers: [{ harness: "claude-code" }] };
+    const base = commonGetsResponder();
+    getMock.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/projects/{id}") return { data: { project: { id: "ws-1", kind: "single_repo", config } } };
+      if (path === "/api/v1/sessions/{sessionId}/local-workflow") return { data: { run: null, automation: { pending: true }, stage: "executing", current: false, accepted: false, operations: [], tests: [], requiredFindings: [], reviews: [], decisions: [] } };
+      return base(path);
+    });
+    const inspector = <SessionInspector session={session([], { provider: "codex" })} view="reviews" />;
+    const view = renderWithQuery(inspector, undefined, (client) => client.setQueryData(["project-config", "ws-1"], config));
+    await screen.findByText("Preparing automatic verification…");
+    await act(async () => { await view.queryClient.invalidateQueries({ queryKey: ["project-config", "ws-1"] }); });
+    expect(view.queryClient.getQueryData(["project-config", "ws-1"])).toEqual(config);
+    expect(screen.getByText("Preparing automatic verification…")).toBeVisible();
+    view.unmount();
+    render(<QueryClientProvider client={view.queryClient}><TooltipProvider>{inspector}</TooltipProvider></QueryClientProvider>);
+    expect(await screen.findByText("Preparing automatic verification…")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Reviews" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it.each(["missing", "error"])("uses the preview project fallback when HTTP config is %s", async (failure) => {
+    previewModeState.enabled = true;
+    const base = commonGetsResponder();
+    getMock.mockImplementation(async (path: string) => path === "/api/v1/projects/{id}"
+      ? failure === "error" ? { error: { message: "Unavailable" } } : { data: { project: { id: "ws-1" } } }
+      : base(path));
+    const { queryClient } = renderWithQuery(<SessionInspector session={session([pr(3, "open")])} view="reviews" />);
+    await waitFor(() => expect(queryClient.getQueryData(["project-config", "ws-1"])).toMatchObject({ worker: { agent: "codex" }, reviewers: [{ harness: "codex" }] }));
+    expect(screen.getByRole("tab", { name: "Reviews" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("disables manual Local review while workflow verification owns the session", async () => {

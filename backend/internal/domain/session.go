@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package domain
 
 import (
@@ -242,8 +244,11 @@ type SessionMetadata struct {
 // facts: identity, agent harness, activity_state, is_terminated, and operational
 // metadata. The user-facing Status is derived from these facts plus PR facts.
 type SessionRecord struct {
-	ID        SessionID `json:"id"`
-	ProjectID ProjectID `json:"projectId,omitempty"`
+	// LocalWorkflowIntent is an intake command committed atomically with a new
+	// session, promotion, or owner-fenced human prompt. Reads leave it nil.
+	LocalWorkflowIntent *LocalWorkflowIntent `json:"-"`
+	ID                  SessionID            `json:"id"`
+	ProjectID           ProjectID            `json:"projectId,omitempty"`
 	// AutomationRunID is the optional durable origin for an unattended spawn.
 	// It is internal lifecycle data, not part of the session API read model.
 	AutomationRunID *AutomationRunID `json:"-"`

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package controllers_test
 
 import (
@@ -124,6 +126,44 @@ func TestLocalWorkflowHTTPContract(t *testing.T) {
 			var result any
 			if e := json.Unmarshal(response.Body.Bytes(), &result); e != nil {
 				t.Fatal(e)
+			}
+		})
+	}
+}
+
+type summaryHTTPService struct {
+	workflowHTTPService
+	ids *[]domain.SessionID
+}
+
+func (s summaryHTTPService) Summaries(_ context.Context, ids []domain.SessionID) ([]localworkflow.CardSummary, error) {
+	*s.ids = append([]domain.SessionID{}, ids...)
+	return []localworkflow.CardSummary{{SessionID: "one", Stage: "testing", TestsPassed: 1, TestsTotal: 2}}, nil
+}
+func TestLocalWorkflowSummaryBatchHTTP(t *testing.T) {
+	for _, tc := range []struct {
+		name, query string
+		want        int
+	}{
+		{"bounded batch", "one,two,one", 200},
+		{"empty", "", 422},
+		{"invalid", "one,%0A", 422},
+		{"too many", strings.Repeat("one,", 200) + "two", 422},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ids []domain.SessionID
+			router := httpd.NewRouterWithControl(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, httpd.APIDeps{LocalWorkflow: summaryHTTPService{ids: &ids}}, httpd.ControlDeps{})
+			res := httptest.NewRecorder()
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/local-workflow/summaries?sessionIds="+tc.query, nil))
+			if res.Code != tc.want {
+				t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+			}
+			if tc.want == 200 {
+				if len(ids) != 2 || !strings.Contains(res.Body.String(), `"testsPassed":1`) {
+					t.Fatalf("wrong batch response ids=%v body=%s", ids, res.Body.String())
+				}
+			} else if len(ids) > 0 {
+				t.Fatal("invalid batch reached service")
 			}
 		})
 	}

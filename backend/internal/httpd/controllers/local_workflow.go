@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package controllers
 
 import (
@@ -6,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -30,6 +33,7 @@ type LocalWorkflowController struct{ Svc LocalWorkflowService }
 
 // Register mounts workflow routes even when the service is unavailable.
 func (c *LocalWorkflowController) Register(r chi.Router) {
+	r.Get("/local-workflow/summaries", c.summaries)
 	r.Get("/sessions/{sessionId}/local-workflow", c.get)
 	r.Post("/sessions/{sessionId}/local-workflow/start", c.start)
 	r.Post("/sessions/{sessionId}/local-workflow/stop", c.stop)
@@ -46,7 +50,7 @@ func (c *LocalWorkflowController) available(w http.ResponseWriter, r *http.Reque
 }
 func localWorkflowResponse(w http.ResponseWriter, r *http.Request, result localworkflow.Snapshot, err error) {
 	if err == nil {
-		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{Run: result.Run, Operations: result.Operations, Tests: result.Tests, Current: result.Current, RequiredFindings: result.RequiredFindings, Stage: result.Stage, Reviews: result.Reviews, Accepted: result.Accepted, Decisions: result.Decisions})
+		envelope.WriteJSON(w, http.StatusOK, LocalWorkflowResponse{PreviousRuns: result.PreviousRuns, Automation: result.Automation, Run: result.Run, Operations: result.Operations, Tests: result.Tests, Current: result.Current, RequiredFindings: result.RequiredFindings, Stage: result.Stage, Reviews: result.Reviews, Accepted: result.Accepted, Decisions: result.Decisions})
 		return
 	}
 	status := http.StatusInternalServerError
@@ -168,4 +172,31 @@ func (c *LocalWorkflowController) log(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	envelope.WriteJSON(w, 200, LocalWorkflowTestLogResponse{result.Text, result.Truncated})
+}
+
+// summaries is deliberately separate from full workflow evidence reads.
+func (c *LocalWorkflowController) summaries(w http.ResponseWriter, r *http.Request) {
+	svc, ok := c.Svc.(interface {
+		Summaries(context.Context, []domain.SessionID) ([]localworkflow.CardSummary, error)
+	})
+	if !ok {
+		apispec.NotImplemented(w, r, r.Method, "/api/v1/local-workflow/summaries")
+		return
+	}
+	raw := strings.Split(r.URL.Query().Get("sessionIds"), ",")
+	ids := make([]domain.SessionID, len(raw))
+	for i, id := range raw {
+		ids[i] = domain.SessionID(id)
+	}
+	ids, err := localworkflow.SummarySessionIDs(ids)
+	if err != nil {
+		localWorkflowResponse(w, r, localworkflow.Snapshot{}, err)
+		return
+	}
+	cards, err := svc.Summaries(r.Context(), ids)
+	if err != nil {
+		localWorkflowResponse(w, r, localworkflow.Snapshot{}, err)
+		return
+	}
+	envelope.WriteJSON(w, http.StatusOK, LocalWorkflowSummariesResponse{Summaries: cards})
 }

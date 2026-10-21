@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package ports
 
 import (
@@ -85,6 +87,19 @@ type Runtime interface {
 	GetOutput(ctx context.Context, handle RuntimeHandle, lines int) (string, error)
 	IsAlive(ctx context.Context, handle RuntimeHandle) (bool, error)
 }
+
+// ManagedRuntimeDestroyer tears down a handle only in the namespace used for
+// new AO-managed runtime sessions. It must not discover, adopt, or destroy a
+// same-named legacy/user session. An adapter without a private namespace may
+// return ErrManagedRuntimeUnsupported only before any I/O or side effects, so
+// callers can retain their existing non-private teardown policy.
+type ManagedRuntimeDestroyer interface {
+	DestroyManaged(ctx context.Context, handle RuntimeHandle) error
+}
+
+// ErrManagedRuntimeUnsupported means no private runtime namespace is configured.
+// It is configuration evidence, never a substitute for an inconclusive probe.
+var ErrManagedRuntimeUnsupported = errors.New("runtime: private managed cleanup unsupported")
 
 // RuntimeChildInspector distinguishes running terminal children from a runtime
 // retained only to serve scrollback. False with no error confirms all children
