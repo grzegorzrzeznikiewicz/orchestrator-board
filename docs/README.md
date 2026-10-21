@@ -1,13 +1,16 @@
-# agent-orchestrator rewrite docs
+# Orchestrator Board documentation
 <!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
 
-Agent Orchestrator runs as a long-running Go backend daemon
+
+Orchestrator Board, based on Agent Orchestrator, runs as a long-running Go backend daemon
 (`backend/`) plus an Electron + TypeScript frontend (`frontend/`). The backend
 supervises coding-agent sessions and exposes daemon control, project/session
 state, terminal streaming, and CDC/event infrastructure.
 
 Start with [architecture.md](architecture.md) for the current backend model and
 [cli/README.md](cli/README.md) for the CLI surface.
+
+See [fork identity, updates and data compatibility](ob-10-fork-identity.md) for this distribution.
 
 - [Automatyczny workflow zadań Local](automatic-local-workflow.md): start po poleceniu, plan kontroli code/report, poprawki, restart i historia.
 

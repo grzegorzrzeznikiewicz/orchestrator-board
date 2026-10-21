@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { randomBytes } from "node:crypto";
 import type { IpcMain, MessageBoxOptions, WebContents } from "electron";
 import type { BrowserRuntimeCommand } from "./browser-runtime-link";

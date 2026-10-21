@@ -1,4 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +11,8 @@ const ACCESS_TOKEN = `header.${Buffer.from(
 const EXPIRED_ACCESS_TOKEN = `header.${Buffer.from(
   JSON.stringify({ exp: 1, sid: "session_123" }),
 ).toString("base64url")}.signature`;
+
+vi.hoisted(() => { process.env.AO_CLOUD_AUTH_REDIRECT = "https://fork.example/app/auth/return"; });
 
 const mocks = vi.hoisted(() => ({
   authenticateWithCode: vi.fn(),
@@ -44,7 +48,7 @@ vi.mock("@workos-inc/node", () => ({
 vi.mock("electron", () => ({
   app: {
     setAsDefaultProtocolClient: vi.fn(),
-    // These tests exercise the packaged deep-link (ao-app://) sign-in flow;
+    // These tests exercise the packaged deep-link (orchestrator-board://) sign-in flow;
     // unpackaged builds default to a loopback redirect instead.
     isPackaged: true,
   },
@@ -66,6 +70,8 @@ import {
   handleCloudDeepLink,
   installCloudIPC,
   readAuthStore,
+  removeAuthStore,
+  registerCloudProtocol,
   showCloudSignInFailure,
   signOutCloud,
   writeAuthStore,
@@ -103,6 +109,34 @@ describe("native WorkOS authentication", () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
+  it.each(["available", "unavailable", "corrupt-fork"])("preserves original encrypted sessions through fork reads, writes and logout (%s)", async (mode) => {
+    const originalAuth = Buffer.from([0, 1, 2, 3, 4]);
+    const originalLegacy = "original-session-sentinel";
+    await writeFile(path.join(dataDir, "cloud-auth.bin"), originalAuth);
+    await writeFile(path.join(dataDir, "cloud-session.json"), originalLegacy);
+    if (mode === "unavailable") mocks.encryptionAvailable = false;
+    if (mode === "corrupt-fork") await writeFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin"), "invalid ciphertext");
+    await expect(readAuthStore(dataDir)).resolves.toEqual({ session: null, pkce: null });
+    await writeAuthStore(dataDir, { session: null, pkce: null });
+    await removeAuthStore(dataDir);
+    expect(await readFile(path.join(dataDir, "cloud-auth.bin"))).toEqual(originalAuth);
+    expect(await readFile(path.join(dataDir, "cloud-session.json"), "utf8")).toBe(originalLegacy);
+    await expect(readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin"))).rejects.toMatchObject({ code: "ENOENT" });
+    if (mode !== "corrupt-fork") expect(mocks.decryptString).not.toHaveBeenCalled();
+  });
+
+  it("registers only the fork scheme", async () => {
+    const { app } = await import("electron");
+    registerCloudProtocol();
+    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith("orchestrator-board");
+    expect(app.setAsDefaultProtocolClient).not.toHaveBeenCalledWith("ao-app");
+  });
+
+  it("ignores callbacks belonging to the original app", async () => {
+    await expect(handleCloudDeepLink("ao-app://callback?code=code_123&state=state_123", dataDir)).resolves.toBeNull();
+    expect(mocks.authenticateWithCode).not.toHaveBeenCalled();
+  });
+
   it("starts PKCE and exchanges the callback without an AO website", async () => {
     await beginCloudSignIn(dataDir);
     expect(mocks.openExternal).toHaveBeenCalledWith(
@@ -113,12 +147,12 @@ describe("native WorkOS authentication", () => {
         provider: "authkit",
         prompt: "login",
         maxAge: 0,
-        redirectUri: "https://api.aoagents.dev/app/auth/return",
+        redirectUri: "https://fork.example/app/auth/return",
       }),
     );
 
     const session = await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
     expect(session).toMatchObject({
@@ -138,7 +172,7 @@ describe("native WorkOS authentication", () => {
 
   it("silently accepts the same completed callback without exchanging its code again", async () => {
     await beginCloudSignIn(dataDir);
-    const callback = "ao-app://callback?code=code_123&state=state_123";
+    const callback = "orchestrator-board://callback?code=code_123&state=state_123";
     const account = await handleCloudDeepLink(callback, dataDir);
 
     await expect(handleCloudDeepLink(callback, dataDir)).resolves.toEqual(account);
@@ -148,7 +182,7 @@ describe("native WorkOS authentication", () => {
 
   it("exchanges a callback once when the OS delivers it concurrently", async () => {
     await beginCloudSignIn(dataDir);
-    const callback = "ao-app://callback?code=code_123&state=state_123";
+    const callback = "orchestrator-board://callback?code=code_123&state=state_123";
     const accounts = await Promise.all([
       handleCloudDeepLink(callback, dataDir),
       handleCloudDeepLink(callback, dataDir),
@@ -160,19 +194,19 @@ describe("native WorkOS authentication", () => {
 
   it("ignores callbacks with no login pending without changing the signed-in account", async () => {
     await beginCloudSignIn(dataDir);
-    const account = await handleCloudDeepLink("ao-app://callback?code=code_123&state=state_123", dataDir);
+    const account = await handleCloudDeepLink("orchestrator-board://callback?code=code_123&state=state_123", dataDir);
     await expect(handleCloudDeepLink(
-      "ao-app://callback?code=different_code&state=state_123", dataDir,
+      "orchestrator-board://callback?code=different_code&state=state_123", dataDir,
     )).resolves.toEqual(account);
     await expect(handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=unverified_state", dataDir,
+      "orchestrator-board://callback?code=code_123&state=unverified_state", dataDir,
     )).resolves.toEqual(account);
     expect(mocks.authenticateWithCode).toHaveBeenCalledTimes(1);
   });
 
   it("quietly returns to an account saved before callback deduplication was added", async () => {
     await beginCloudSignIn(dataDir);
-    const callback = "ao-app://callback?code=code_123&state=state_123";
+    const callback = "orchestrator-board://callback?code=code_123&state=state_123";
     const account = await handleCloudDeepLink(callback, dataDir);
     const store = await readAuthStore(dataDir);
     delete store.completedCallback;
@@ -184,7 +218,7 @@ describe("native WorkOS authentication", () => {
 
   it("does not restore a signed-out account when its old return button is clicked", async () => {
     await beginCloudSignIn(dataDir);
-    const callback = "ao-app://callback?code=code_123&state=state_123";
+    const callback = "orchestrator-board://callback?code=code_123&state=state_123";
     await handleCloudDeepLink(callback, dataDir);
     await signOutCloud(dataDir);
 
@@ -195,7 +229,7 @@ describe("native WorkOS authentication", () => {
 
   it("keeps a newer pending login when an already completed callback repeats", async () => {
     await beginCloudSignIn(dataDir);
-    const callback = "ao-app://callback?code=code_123&state=state_123";
+    const callback = "orchestrator-board://callback?code=code_123&state=state_123";
     const account = await handleCloudDeepLink(callback, dataDir);
     mocks.getAuthorizationUrlWithPKCE.mockResolvedValueOnce({
       url: "https://workos.example/authorize", state: "state_456", codeVerifier: "verifier_456",
@@ -203,7 +237,7 @@ describe("native WorkOS authentication", () => {
     await beginCloudSignIn(dataDir);
 
     await expect(handleCloudDeepLink(callback, dataDir)).resolves.toEqual(account);
-    await handleCloudDeepLink("ao-app://callback?code=code_456&state=state_456", dataDir);
+    await handleCloudDeepLink("orchestrator-board://callback?code=code_456&state=state_456", dataDir);
     expect(mocks.authenticateWithCode).toHaveBeenCalledTimes(2);
     expect(mocks.authenticateWithCode).toHaveBeenLastCalledWith(expect.objectContaining({
       code: "code_456", codeVerifier: "verifier_456",
@@ -234,7 +268,7 @@ describe("native WorkOS authentication", () => {
 
     beforeEach(async () => {
       await beginCloudSignIn(dataDir);
-      await handleCloudDeepLink("ao-app://callback?code=code_123&state=state_123", dataDir);
+      await handleCloudDeepLink("orchestrator-board://callback?code=code_123&state=state_123", dataDir);
       mocks.providerAuthenticate.mockResolvedValue({
         provider: "claude-code",
         credentialType: "oauth_token",
@@ -265,7 +299,7 @@ describe("native WorkOS authentication", () => {
     await beginCloudSignIn(dataDir);
     await expect(
       handleCloudDeepLink(
-        "ao-app://callback?code=code_123&state=attacker_state",
+        "orchestrator-board://callback?code=code_123&state=attacker_state",
         dataDir,
       ),
     ).rejects.toThrow("state did not match");
@@ -275,13 +309,13 @@ describe("native WorkOS authentication", () => {
     mocks.encryptionAvailable = false;
     await beginCloudSignIn(dataDir);
     const account = await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
     expect(account?.user.email).toBe("person@example.com");
     await expect(
-      readFile(path.join(dataDir, "cloud-auth.bin")),
+      readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin")),
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(getCloudSession(dataDir)).resolves.toMatchObject({
       user: { email: "person@example.com" },
@@ -294,13 +328,13 @@ describe("native WorkOS authentication", () => {
     mocks.selectedStorageBackend = "basic_text";
     await beginCloudSignIn(dataDir);
     const account = await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
     expect(account?.user.email).toBe("person@example.com");
     await expect(
-      readFile(path.join(dataDir, "cloud-auth.bin")),
+      readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin")),
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(getCloudSession(dataDir)).resolves.toMatchObject({
       user: { email: "person@example.com" },
@@ -350,7 +384,7 @@ describe("native WorkOS authentication", () => {
     );
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
@@ -390,7 +424,7 @@ describe("native WorkOS authentication", () => {
     );
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
@@ -403,10 +437,10 @@ describe("native WorkOS authentication", () => {
   it("publishes signed-out state when a token request finds the auth store missing", async () => {
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
-    await rm(path.join(dataDir, "cloud-auth.bin"), { force: true });
+    await rm(path.join(dataDir, "orchestrator-board-cloud-auth.bin"), { force: true });
 
     await expect(getCloudAccessToken(dataDir)).resolves.toBeNull();
     expect(mocks.notifyRenderers).toHaveBeenCalledWith(null);
@@ -439,7 +473,7 @@ describe("native WorkOS authentication", () => {
       });
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
@@ -447,7 +481,7 @@ describe("native WorkOS authentication", () => {
       user: { email: "person@example.com" },
     });
     await expect(
-      readFile(path.join(dataDir, "cloud-auth.bin")),
+      readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin")),
     ).resolves.toBeInstanceOf(Buffer);
     await expect(getCloudSession(dataDir)).resolves.toMatchObject({
       user: { email: "person@example.com" },
@@ -483,7 +517,7 @@ describe("native WorkOS authentication", () => {
     );
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
 
@@ -505,14 +539,14 @@ describe("native WorkOS authentication", () => {
     await expect(pendingSession).resolves.toBeNull();
     await expect(getCloudSession(dataDir)).resolves.toBeNull();
     await expect(
-      readFile(path.join(dataDir, "cloud-auth.bin")),
+      readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin")),
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("signs out locally without opening the browser", async () => {
     await beginCloudSignIn(dataDir);
     await handleCloudDeepLink(
-      "ao-app://callback?code=code_123&state=state_123",
+      "orchestrator-board://callback?code=code_123&state=state_123",
       dataDir,
     );
     mocks.openExternal.mockClear();

@@ -1,3 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
+import { PRODUCT } from "../../shared/product";
 import type { ProjectSource } from "@aoagents/product-ui";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -44,7 +49,6 @@ import { Badge } from "./ui/badge";
  *   heading — the grid's standalone action and the sidebar own it.
  */
 const isMac = isMacPlatform();
-const GITHUB_REPOSITORY_URL = "https://github.com/Untrivial-ai/agent-orchestrator";
 const RECENT_PROJECT_LIMIT = 3;
 const HOME_BUTTON_CLASS =
 	"flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 text-left transition-[scale,background-color] duration-fast ease-out hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none";
@@ -216,7 +220,7 @@ export function HomePage() {
 							{/* Quiet text link — not TopbarButton / accent. Dashed underline only on hover. */}
 							<button
 								className="inline-flex shrink-0 items-center gap-1.5 border-b border-dashed border-transparent pb-px text-sm text-muted-foreground hover:border-current hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-								onClick={() => void aoBridge.app.openExternal(GITHUB_REPOSITORY_URL)}
+								onClick={() => void aoBridge.app.openExternal(PRODUCT.sourceUrl)}
 								type="button"
 							>
 								<Star className="size-3.5" strokeWidth={1.8} aria-hidden="true" />

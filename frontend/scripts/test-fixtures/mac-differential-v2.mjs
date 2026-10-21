@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdtempSync, readFileSync, writeFileSync, utimesSync, mkdirSync } from "node:fs";
@@ -26,8 +28,8 @@ export async function macV2Fixture(arches = ["arm64", "x64"]) {
     for (let offset = 0; offset < previous.length; offset += 64) createHash("sha512").update(`${arch}:${offset}`).digest().copy(previous, offset);
     const target = Buffer.from(previous);
     for (let offset = 180_000; offset < 228_000; offset += 64) createHash("sha512").update(`patch:${offset}`).digest().copy(target, offset);
-    const oldPath = join(old, `Agent.Orchestrator-darwin-${arch}-1.0.0.zip`);
-    const zipPath = join(dir, `Agent.Orchestrator-darwin-${arch}-2.0.0.zip`);
+    const oldPath = join(old, `Orchestrator.Board-darwin-${arch}-1.0.0.zip`);
+    const zipPath = join(dir, `Orchestrator.Board-darwin-${arch}-2.0.0.zip`);
     zip(previous, oldPath); zip(target, zipPath);
     inputs.push({ arch, zipPath, baseline: { identity: baseline, zipPath: oldPath } });
   }

@@ -1,16 +1,19 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import product from "../../product.json";
 
 // Cross-platform "this boot is a post-update relaunch" signal.
 //
-// macOS already runs a richer marker (update-restart/active.json) that the native
+// macOS already runs a richer marker (orchestrator-board-update-restart/active.json) that the native
 // update helper watches for its terminate handshake; that mechanism is owned end
 // to end by mac-update-progress.ts and the Swift helper and must not be perturbed
 // just to drive renderer copy. This is a separate, single-purpose marker written
 // on every platform right before quitAndInstall so the renderer can swap the
 // startup loader phrases to "Updating / Restarting AO". It reuses the same
-// update-restart directory and atomic-write style; it does not touch active.json.
+// fork update-restart directory and atomic-write style; it does not touch active.json.
 //
 // Correctness: the flag is true only for a genuine post-update relaunch of THIS
 // version and never sticks. The marker records the version being installed; after
@@ -29,7 +32,7 @@ type RelaunchFlag = {
 };
 
 function flagDir(stateDir: string): string {
-	return path.join(stateDir, "update-restart");
+	return path.join(stateDir, `${product.executableName}-update-restart`);
 }
 
 async function atomicJSON(file: string, value: unknown): Promise<void> {

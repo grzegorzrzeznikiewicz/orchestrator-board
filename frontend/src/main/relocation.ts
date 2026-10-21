@@ -1,6 +1,9 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import semver from "semver";
+import product from "../../product.json";
 
 /**
  * macOS relocation policy for a bundle running outside /Applications.
@@ -30,6 +33,8 @@ export type RelocationAction =
 const APPLICATIONS_DIR = "/Applications";
 
 export interface RelocationInputs {
+	/** Electron moves a bundle using its current basename; a rename must never target the original app. */
+	runningBundlePath?: string;
 	/** app.isInApplicationsFolder(): true for /Applications AND ~/Applications. */
 	inApplicationsFolder: boolean;
 	/** A bundle already occupies /Applications/<our bundle name>. */
@@ -48,6 +53,7 @@ export interface RelocationInputs {
  * session to a bundle we could not identify.
  */
 export function decideRelocation(inputs: RelocationInputs): RelocationAction {
+	if (inputs.runningBundlePath && path.basename(inputs.runningBundlePath) !== `${product.productName}.app`) return "stay";
 	if (inputs.inApplicationsFolder) return "stay";
 	if (!inputs.installedPresent) return "relocate";
 
@@ -58,9 +64,9 @@ export function decideRelocation(inputs: RelocationInputs): RelocationAction {
 	return semver.lt(installed, running) ? "relocate" : "handoff";
 }
 
-/** Path the running bundle would occupy under /Applications. */
-export function installedBundlePath(runningBundlePath: string): string {
-	return path.join(APPLICATIONS_DIR, path.basename(runningBundlePath));
+/** The maintained product destination is independent of a downloaded bundle's name. */
+export function installedBundlePath(_runningBundlePath: string): string {
+	return path.join(APPLICATIONS_DIR, `${product.productName}.app`);
 }
 
 /**
@@ -76,6 +82,8 @@ export function readBundleVersion(bundlePath: string): string | null {
 			path.join(bundlePath, "Contents", "Info.plist"),
 			"utf8",
 		);
+		const identity = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]*)<\/string>/.exec(plist);
+		if (identity?.[1]?.trim() !== product.appId) return null;
 		const match =
 			/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]*)<\/string>/.exec(
 				plist,

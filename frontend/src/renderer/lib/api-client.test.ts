@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	apiClient,
@@ -164,7 +166,7 @@ describe("apiClient runtime base URL", () => {
 
 		const { error } = await apiClient.GET("/api/v1/projects");
 
-		expect(error).toEqual({ message: "AO daemon is not ready." });
+		expect(error).toEqual({ message: "Orchestrator Board daemon is not ready." });
 		expect(getApiBaseUrl()).toBe("");
 		expect(hasTrustedApiBaseUrl()).toBe(false);
 		expect(fetchSpy).not.toHaveBeenCalled();

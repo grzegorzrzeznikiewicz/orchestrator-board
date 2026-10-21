@@ -1,0 +1,508 @@
+Orchestrator Board
+Gama Software fork of Agent Orchestrator
+https://github.com/grzegorzrzeznikiewicz/orchestrator-board
+
+Upstream: Agent Orchestrator
+https://github.com/aoagents/agent-orchestrator
+Copyright 2026 Untrivial
+The original root Apache License 2.0 is reproduced byte-for-byte in LICENSE.
+Upstream author and contributor rights are retained. This notice does not
+claim Gama Software owns upstream code or third-party dependencies.
+
+Fork modifications, 2026-10-17 (OB-10):
+- frontend/product.json: desktop name, bundle/executable/protocol, fork coordinates.
+- frontend/src/main.ts, main/cloud-auth.ts, main/product-about.ts, main/tray.ts,
+  main/app-state.ts: desktop identity, own callback, About/license access and marker.
+- frontend/src/renderer/components/{AOMascot,Sidebar,TitlebarNav,DaemonStartupLoader}.tsx,
+  renderer/i18n/*.json, main/tray-catalog.generated.ts, frontend/index.html:
+  visible desktop identity and translated labels.
+- frontend/assets/*, frontend/src/renderer/assets/ao-logo.*, assets/ao-logo.svg:
+  Gama diamond/workflow SVG and derived product artwork, supplied by the owner.
+- frontend/forge.config.ts, makers/* and packaging/repair/helper scripts:
+  distinct fork bundle/executable/feed/resources and safe installation boundaries.
+- frontend/src/main/{auto-updater*,feature-builds*,desktop-version-floor*,
+  release-source*,stale-app-copies*,relocation*}, backend/internal/cli/start*:
+  fork-only update provenance, bootstrap, relocation and repair behavior.
+- frontend/scripts/generate-license-resources.mjs, scripts/license-overrides/*,
+  resources/licenses/*, package.json/package-lock.json: retained full notices,
+  product metadata and distribution-time license preparation.
+- docs/fork-branding-assets.md and fork documentation: provenance, compatibility
+  boundaries and verification. Corresponding tests accompany these changes.
+Other fork changes remain documented in the public source history.
+
+License metadata correction:
+The inherited desktop frontend package.json declared MIT, while the source
+repository's root LICENSE explicitly grants Apache-2.0 and names Untrivial.
+The fork's desktop package metadata now declares Apache-2.0 to match that
+unchanged root document. This does not relicense dependencies. Their original
+license declarations, full supplied notices and attribution are retained in
+THIRD-PARTY-LICENSES.txt. Local @aoagents/product-ui retains inherited package
+metadata; its source also inherits the repository root LICENSE. Where a vendor
+package omits a copyright/license file, that omission is marked explicitly;
+MIT terms and supplied package attribution are reproduced without fabricating
+copyright owners or dates. The npm declarations are recorded even where a
+supplemental upstream repository license differs.
+
+Compatibility names:
+The ao CLI, ~/.ao/AO_DATA_DIR storage, API identifiers, AO Cloud service, vendor
+auth endpoints and original Agent Orchestrator mobile app remain compatibility
+or third-party references. They are not claims that those services/apps belong
+to this fork. Upstream HTTPS auth/billing bounce pages emit ao-app:// and must
+be configured separately before they can return to this fork's own scheme.
+
+Gama Software name and artwork remain their owner's marks. Company artwork
+was supplied and adaptation authorized by the project owner on 2026-10-17.
+See ASSET-NOTICES.txt and docs/fork-branding-assets.md for detailed provenance.
+Electron and Chromium ship their own original notices with the app runtime.
+
+Exact modified-file inventory since upstream df4cabc (OB-11 and OB-1, including OB-10):
+Handwritten source files carry prominent modification comments. Generated data,
+lockfiles and company artwork retain the provenance below without schema changes.
+- .github/workflows/build-artifacts.yml — in-file modification notice
+- .github/workflows/ci.yml — in-file modification notice
+- .github/workflows/cli-e2e.yml — in-file modification notice
+- .github/workflows/e2e-gate-tests.yml — in-file modification notice
+- .github/workflows/frontend.yml — in-file modification notice
+- .github/workflows/gitleaks.yml — in-file modification notice
+- .github/workflows/go.yml — in-file modification notice
+- .github/workflows/mac-update-e2e.yml — in-file modification notice
+- .github/workflows/mobile.yml — in-file modification notice
+- .github/workflows/release-latest-guard.yml — in-file modification notice
+- .gitignore — in-file modification notice
+- AGENTS.md — in-file modification notice
+- README.md — in-file modification notice
+- assets/ao-logo.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- backend/cmd/ao/main.go — in-file modification notice
+- backend/internal/adapters/chatdriver/acp/driver_test.go — in-file modification notice
+- backend/internal/adapters/chatdriver/acp/history_replay_test.go — in-file modification notice
+- backend/internal/adapters/reviewer/claudecode/claudecode.go — in-file modification notice
+- backend/internal/adapters/reviewer/claudecode/claudecode_test.go — in-file modification notice
+- backend/internal/adapters/runtime/runtimeselect/hybrid.go — in-file modification notice
+- backend/internal/adapters/runtime/runtimeselect/hybrid_managed_test.go — in-file modification notice
+- backend/internal/adapters/runtime/tmux/managed_cleanup_test.go — in-file modification notice
+- backend/internal/adapters/runtime/tmux/tmux.go — in-file modification notice
+- backend/internal/cli/hooks.go — in-file modification notice
+- backend/internal/cli/hooks_test.go — in-file modification notice
+- backend/internal/cli/review.go — in-file modification notice
+- backend/internal/cli/review_test.go — in-file modification notice
+- backend/internal/cli/start.go — in-file modification notice
+- backend/internal/cli/start_test.go — in-file modification notice
+- backend/internal/daemon/daemon.go — in-file modification notice
+- backend/internal/daemon/lifecycle_wiring.go — in-file modification notice
+- backend/internal/daemon/local_workflow_decisions.go — in-file modification notice
+- backend/internal/daemon/local_workflow_decisions_test.go — in-file modification notice
+- backend/internal/daemon/local_workflow_wiring.go — in-file modification notice
+- backend/internal/domain/local_review.go — in-file modification notice
+- backend/internal/domain/local_review_result.go — in-file modification notice
+- backend/internal/domain/local_review_result_test.go — in-file modification notice
+- backend/internal/domain/local_review_test.go — in-file modification notice
+- backend/internal/domain/local_verification_plan.go — in-file modification notice
+- backend/internal/domain/local_workflow.go — in-file modification notice
+- backend/internal/domain/local_workflow_intent.go — in-file modification notice
+- backend/internal/domain/local_workflow_summary.go — in-file modification notice
+- backend/internal/domain/local_workflow_test.go — in-file modification notice
+- backend/internal/domain/projectconfig.go — in-file modification notice
+- backend/internal/domain/review.go — in-file modification notice
+- backend/internal/domain/session.go — in-file modification notice
+- backend/internal/httpd/api.go — in-file modification notice
+- backend/internal/httpd/api_timeout_test.go — in-file modification notice
+- backend/internal/httpd/apispec/openapi.yaml — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- backend/internal/httpd/apispec/specgen/build.go — in-file modification notice
+- backend/internal/httpd/controllers/dto.go — in-file modification notice
+- backend/internal/httpd/controllers/local_review_test.go — in-file modification notice
+- backend/internal/httpd/controllers/local_workflow.go — in-file modification notice
+- backend/internal/httpd/controllers/local_workflow_integration_test.go — in-file modification notice
+- backend/internal/httpd/controllers/local_workflow_regression_test.go — in-file modification notice
+- backend/internal/httpd/controllers/local_workflow_test.go — in-file modification notice
+- backend/internal/httpd/controllers/reviews.go — in-file modification notice
+- backend/internal/httpd/lan_listener.go — in-file modification notice
+- backend/internal/httpd/local_workflow_decision_lan_test.go — in-file modification notice
+- backend/internal/lifecycle/local_workflow_intent_test.go — in-file modification notice
+- backend/internal/lifecycle/manager.go — in-file modification notice
+- backend/internal/localsnapshot/guard.go — in-file modification notice
+- backend/internal/localsnapshot/guard_chmod_test.go — in-file modification notice
+- backend/internal/localsnapshot/guard_observed_test.go — in-file modification notice
+- backend/internal/localsnapshot/guard_test.go — in-file modification notice
+- backend/internal/localsnapshot/read_chmod_darwin.go — in-file modification notice
+- backend/internal/localsnapshot/read_chmod_other.go — in-file modification notice
+- backend/internal/localsnapshot/snapshot.go — in-file modification notice
+- backend/internal/localsnapshot/snapshot_test.go — in-file modification notice
+- backend/internal/localworkflow/automatic.go — in-file modification notice
+- backend/internal/localworkflow/automatic_test.go — in-file modification notice
+- backend/internal/localworkflow/control.go — in-file modification notice
+- backend/internal/localworkflow/control_test.go — in-file modification notice
+- backend/internal/localworkflow/coordinator.go — in-file modification notice
+- backend/internal/localworkflow/coordinator_test.go — in-file modification notice
+- backend/internal/localworkflow/decision.go — in-file modification notice
+- backend/internal/localworkflow/decision_test.go — in-file modification notice
+- backend/internal/localworkflow/logs.go — in-file modification notice
+- backend/internal/localworkflow/logs_test.go — in-file modification notice
+- backend/internal/localworkflow/planner.go — in-file modification notice
+- backend/internal/localworkflow/planner_coverage_test.go — in-file modification notice
+- backend/internal/localworkflow/planner_stabilization_test.go — in-file modification notice
+- backend/internal/localworkflow/presentation.go — in-file modification notice
+- backend/internal/localworkflow/presentation_test.go — in-file modification notice
+- backend/internal/localworkflow/prompt.go — in-file modification notice
+- backend/internal/localworkflow/recovery.go — in-file modification notice
+- backend/internal/localworkflow/summary.go — in-file modification notice
+- backend/internal/localworkflow/summary_test.go — in-file modification notice
+- backend/internal/localworkflow/test_admission.go — in-file modification notice
+- backend/internal/localworkflow/test_admission_test.go — in-file modification notice
+- backend/internal/localworkflow/test_admission_unix.go — in-file modification notice
+- backend/internal/localworkflow/test_admission_unsupported.go — in-file modification notice
+- backend/internal/localworkflow/test_admission_windows.go — in-file modification notice
+- backend/internal/localworkflow/test_host.go — in-file modification notice
+- backend/internal/localworkflow/test_process_unix.go — in-file modification notice
+- backend/internal/localworkflow/test_process_windows.go — in-file modification notice
+- backend/internal/localworkflow/test_runner.go — in-file modification notice
+- backend/internal/localworkflow/test_runner_test.go — in-file modification notice
+- backend/internal/localworkflow/worker.go — in-file modification notice
+- backend/internal/localworkflow/worker_test.go — in-file modification notice
+- backend/internal/ports/local_review.go — in-file modification notice
+- backend/internal/ports/outbound.go — in-file modification notice
+- backend/internal/ports/reviewer.go — in-file modification notice
+- backend/internal/review/launcher.go — in-file modification notice
+- backend/internal/review/launcher_managed_test.go — in-file modification notice
+- backend/internal/review/local_evidence.go — in-file modification notice
+- backend/internal/review/local_evidence_test.go — in-file modification notice
+- backend/internal/review/local_review.go — in-file modification notice
+- backend/internal/review/local_review_test.go — in-file modification notice
+- backend/internal/review/planner.go — in-file modification notice
+- backend/internal/review/prompt.go — in-file modification notice
+- backend/internal/review/review.go — in-file modification notice
+- backend/internal/service/browser/service_test.go — in-file modification notice
+- backend/internal/service/chat/controller.go — in-file modification notice
+- backend/internal/service/chat/local_workflow_test.go — in-file modification notice
+- backend/internal/service/chat/workflow_cancel.go — in-file modification notice
+- backend/internal/service/chat/workflow_supersede_test.go — in-file modification notice
+- backend/internal/service/project/service.go — in-file modification notice
+- backend/internal/service/project/service_test.go — in-file modification notice
+- backend/internal/service/project/types.go — in-file modification notice
+- backend/internal/service/review/local_result.go — in-file modification notice
+- backend/internal/service/review/local_workflow.go — in-file modification notice
+- backend/internal/service/review/review.go — in-file modification notice
+- backend/internal/session_manager/local_workflow_intent_test.go — in-file modification notice
+- backend/internal/session_manager/manager.go — in-file modification notice
+- backend/internal/session_manager/session_input.go — in-file modification notice
+- backend/internal/session_manager/session_input_test.go — in-file modification notice
+- backend/internal/sessionguard/guard.go — in-file modification notice
+- backend/internal/skillassets/using-ao/commands/review.md — in-file modification notice
+- backend/internal/storage/sqlite/gen/conversations.sql.go — generated or data artifact; fork provenance in this notice
+- backend/internal/storage/sqlite/gen/local_workflow.sql.go — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- backend/internal/storage/sqlite/gen/local_workflow_intent.sql.go — in-file modification notice
+- backend/internal/storage/sqlite/gen/models.go — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- backend/internal/storage/sqlite/gen/review.sql.go — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- backend/internal/storage/sqlite/migrate_burned_versions_test.go — in-file modification notice
+- backend/internal/storage/sqlite/migrate_local_result_test.go — in-file modification notice
+- backend/internal/storage/sqlite/migrate_local_review_test.go — in-file modification notice
+- backend/internal/storage/sqlite/migrate_local_workflow_test.go — in-file modification notice
+- backend/internal/storage/sqlite/migrations/0199_local_review.sql — Merged immutable migration; exact fork modification provenance retained in this NOTICE manifest.
+- backend/internal/storage/sqlite/migrations/0200_local_review_result.sql — Merged immutable migration; exact fork modification provenance retained in this NOTICE manifest.
+- backend/internal/storage/sqlite/migrations/0201_local_workflow.sql — Merged immutable migration; exact fork modification provenance retained in this NOTICE manifest.
+- backend/internal/storage/sqlite/migrations/0202_local_workflow_decision.sql — Merged immutable migration; exact fork modification provenance retained in this NOTICE manifest.
+- backend/internal/storage/sqlite/migrations/0203_local_workflow_intent.sql — in-file modification notice
+- backend/internal/storage/sqlite/queries/conversations.sql — in-file modification notice
+- backend/internal/storage/sqlite/queries/local_workflow.sql — in-file modification notice
+- backend/internal/storage/sqlite/queries/local_workflow_intent.sql — in-file modification notice
+- backend/internal/storage/sqlite/queries/review.sql — in-file modification notice
+- backend/internal/storage/sqlite/store/conversation_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/conversation_turn_output_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_review_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_cards.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_cards_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_decision_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_decision_store_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_history.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_history_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_intent_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_intent_store_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_steer_intent_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/local_workflow_store_test.go — in-file modification notice
+- backend/internal/storage/sqlite/store/review_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/session_interaction.go — in-file modification notice
+- backend/internal/storage/sqlite/store/session_store.go — in-file modification notice
+- backend/internal/storage/sqlite/store/store.go — in-file modification notice
+- backend/internal/terminal/manager.go — in-file modification notice
+- cloud/internal/worker/project_scripts_test.go — in-file modification notice
+- desktop-version-floor.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- docs/README.md — in-file modification notice
+- docs/automatic-local-workflow.md — in-file modification notice
+- docs/ci.md — in-file modification notice
+- docs/fork-branding-assets.md — in-file modification notice
+- docs/ob-10-fork-identity.md — in-file modification notice
+- docs/ob-11-verification.md — in-file modification notice
+- docs/ob-2-verification.md — in-file modification notice
+- docs/ob-3-verification.md — in-file modification notice
+- docs/ob-4-verification.md — in-file modification notice
+- docs/ob-5-verification.md — in-file modification notice
+- docs/ob-6-verification.md — in-file modification notice
+- docs/ob-7-regression.md — in-file modification notice
+- docs/screenshots/ob-2-local-review.jpg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- docs/superpowers/plans/2026-10-15-ob-11-ci.md — in-file modification notice
+- docs/superpowers/plans/2026-10-15-ob-2-local-review.md — in-file modification notice
+- docs/superpowers/plans/2026-10-16-ob-4-local-workflow.md — in-file modification notice
+- docs/superpowers/plans/2026-10-17-ob-10-fork-branding.md — in-file modification notice
+- docs/superpowers/plans/2026-10-17-ob-6-human-acceptance.md — in-file modification notice
+- docs/superpowers/plans/2026-10-17-ob-7-regression.md — in-file modification notice
+- docs/superpowers/plans/2026-10-19-automatic-local-workflow.md — in-file modification notice
+- docs/superpowers/specs/2026-10-15-ob-2-local-review-design.md — in-file modification notice
+- docs/superpowers/specs/2026-10-16-ob-4-local-workflow-design.md — in-file modification notice
+- docs/superpowers/specs/2026-10-17-ob-10-fork-branding-design.md — in-file modification notice
+- docs/superpowers/specs/2026-10-17-ob-6-human-acceptance-design.md — in-file modification notice
+- frontend/assets/ao-logo.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/icon.icns — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/icon.ico — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/icon.png — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/orchestrator-board.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/tray.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/trayIconTemplate.png — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/assets/trayIconTemplate@2x.png — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/docs/desktop-release.md — in-file modification notice
+- frontend/e2e/automatic-local-workflow.spec.ts — in-file modification notice
+- frontend/e2e/chat-composer-text-selection.spec.ts — in-file modification notice
+- frontend/e2e/chat-prompt-suggestion.spec.ts — in-file modification notice
+- frontend/e2e/files-narrow-inspector.spec.ts — in-file modification notice
+- frontend/e2e/project-startup.spec.ts — in-file modification notice
+- frontend/e2e/smoke-board.spec.ts — in-file modification notice
+- frontend/e2e/support/fake-bridge.ts — in-file modification notice
+- frontend/e2e/titlebar-brand.spec.ts — in-file modification notice
+- frontend/eslint-suppressions.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/eslint.config.mjs — in-file modification notice
+- frontend/forge.config.test.ts — in-file modification notice
+- frontend/forge.config.ts — in-file modification notice
+- frontend/index.html — in-file modification notice
+- frontend/makers/maker-appimage.test.ts — in-file modification notice
+- frontend/makers/maker-appimage.ts — in-file modification notice
+- frontend/native/repair-installer/guard.sh — in-file modification notice
+- frontend/native/update-helper/main.swift — in-file modification notice
+- frontend/package-lock.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/package.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/playwright.config.ts — in-file modification notice
+- frontend/product.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/scripts/build-mac-repair-installer.mjs — in-file modification notice
+- frontend/scripts/build-mac-repair-installer.node-test.mjs — in-file modification notice
+- frontend/scripts/e2e-mac-update.mjs — in-file modification notice
+- frontend/scripts/e2e-mac-update.test.mjs — in-file modification notice
+- frontend/scripts/feed.mjs — in-file modification notice
+- frontend/scripts/feed.test.mjs — in-file modification notice
+- frontend/scripts/fork-NOTICE.txt — generated or data artifact; fork provenance in this notice
+- frontend/scripts/generate-license-resources.mjs — in-file modification notice
+- frontend/scripts/generate-license-resources.test.ts — in-file modification notice
+- frontend/scripts/license-overrides/apm-js-collab__code-transformer-bundler-plugins.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/get-folder-size.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/lazy-val.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/posthog__core.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/qrcode-generator.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/react-remove-scroll-bar.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/sentry__server-utils.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/sources.json — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/standardwebhooks.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/tiny-each-async.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/license-overrides/tmp-promise.txt — Preserved third-party/original license text or generated distribution notice; no invented in-file authorship.
+- frontend/scripts/lint-config.node-test.mjs — in-file modification notice
+- frontend/scripts/mac-differential-v2.test.mjs — in-file modification notice
+- frontend/scripts/release-source.integration.test.mjs — in-file modification notice
+- frontend/scripts/test-fixtures/mac-differential-v2.mjs — in-file modification notice
+- frontend/src/api/schema.ts — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- frontend/src/docs/content/changelog.mdx — in-file modification notice
+- frontend/src/docs/content/configuration/remote-access.mdx — in-file modification notice
+- frontend/src/docs/content/faq.mdx — in-file modification notice
+- frontend/src/docs/content/index.mdx — in-file modification notice
+- frontend/src/docs/content/installation.mdx — in-file modification notice
+- frontend/src/docs/content/platforms.mdx — in-file modification notice
+- frontend/src/docs/content/troubleshooting.mdx — in-file modification notice
+- frontend/src/docs/public/orchestrator-board.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/docs/src/app/(docs)/[[...slug]]/page.tsx — in-file modification notice
+- frontend/src/docs/src/app/layout.tsx — in-file modification notice
+- frontend/src/docs/src/components/mdx.tsx — in-file modification notice
+- frontend/src/docs/src/lib/branding.test.ts — in-file modification notice
+- frontend/src/docs/src/lib/branding.ts — in-file modification notice
+- frontend/src/docs/src/lib/constants.ts — in-file modification notice
+- frontend/src/docs/src/lib/layout.shared.tsx — in-file modification notice
+- frontend/src/main.ts — in-file modification notice
+- frontend/src/main/app-state.ts — in-file modification notice
+- frontend/src/main/auto-updater.test.ts — in-file modification notice
+- frontend/src/main/auto-updater.ts — in-file modification notice
+- frontend/src/main/cloud-auth-local.test.ts — in-file modification notice
+- frontend/src/main/cloud-auth-loopback.test.ts — in-file modification notice
+- frontend/src/main/cloud-auth.test.ts — in-file modification notice
+- frontend/src/main/cloud-auth.ts — in-file modification notice
+- frontend/src/main/desktop-launch-config.test.ts — in-file modification notice
+- frontend/src/main/desktop-launch-config.ts — in-file modification notice
+- frontend/src/main/desktop-version-floor.test.ts — in-file modification notice
+- frontend/src/main/desktop-version-floor.ts — in-file modification notice
+- frontend/src/main/electron-user-data.test.ts — in-file modification notice
+- frontend/src/main/electron-user-data.ts — in-file modification notice
+- frontend/src/main/feature-builds.test.ts — in-file modification notice
+- frontend/src/main/feature-builds.ts — in-file modification notice
+- frontend/src/main/local-workflow-decisions.test.ts — in-file modification notice
+- frontend/src/main/local-workflow-decisions.ts — in-file modification notice
+- frontend/src/main/mac-differential-v2-protocol.ts — in-file modification notice
+- frontend/src/main/mac-update-progress.test.ts — in-file modification notice
+- frontend/src/main/mac-update-progress.ts — in-file modification notice
+- frontend/src/main/menu.test.ts — in-file modification notice
+- frontend/src/main/menu.ts — in-file modification notice
+- frontend/src/main/product-about.test.ts — in-file modification notice
+- frontend/src/main/product-about.ts — in-file modification notice
+- frontend/src/main/provider-auth-flow.ts — in-file modification notice
+- frontend/src/main/release-source-provider.ts — in-file modification notice
+- frontend/src/main/release-source.test.ts — in-file modification notice
+- frontend/src/main/release-source.ts — in-file modification notice
+- frontend/src/main/relocation.test.ts — in-file modification notice
+- frontend/src/main/relocation.ts — in-file modification notice
+- frontend/src/main/remotes-main.ts — in-file modification notice
+- frontend/src/main/stale-app-copies.test.ts — in-file modification notice
+- frontend/src/main/stale-app-copies.ts — in-file modification notice
+- frontend/src/main/tray-catalog.generated.ts — Generated artifact; modification provenance retained in modified source and exact NOTICE manifest.
+- frontend/src/main/tray.test.ts — in-file modification notice
+- frontend/src/main/tray.ts — in-file modification notice
+- frontend/src/main/update-relaunch-flag.test.ts — in-file modification notice
+- frontend/src/main/update-relaunch-flag.ts — in-file modification notice
+- frontend/src/preload.ts — in-file modification notice
+- frontend/src/renderer/__tests__/_shell-create-project-config.test.tsx — in-file modification notice
+- frontend/src/renderer/__tests__/_shell-index-home.test.tsx — in-file modification notice
+- frontend/src/renderer/__tests__/integration/board-empty-states.test.tsx — in-file modification notice
+- frontend/src/renderer/assets/ao-logo.png — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/assets/ao-logo.svg — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/components/AOMascot.tsx — in-file modification notice
+- frontend/src/renderer/components/CoderTemplatePicker.tsx — in-file modification notice
+- frontend/src/renderer/components/CreateProjectAgentSheet.test.tsx — in-file modification notice
+- frontend/src/renderer/components/CreateProjectAgentSheet.tsx — in-file modification notice
+- frontend/src/renderer/components/CreateProjectFlow.test.tsx — in-file modification notice
+- frontend/src/renderer/components/DaemonFailureBanner.test.tsx — in-file modification notice
+- frontend/src/renderer/components/DaemonStartupLoader.test.tsx — in-file modification notice
+- frontend/src/renderer/components/DaemonStartupLoader.tsx — in-file modification notice
+- frontend/src/renderer/components/GlobalSettingsForm.test.tsx — in-file modification notice
+- frontend/src/renderer/components/HomePage.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalReviewHistory.test.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalReviewHistory.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalWorkflowBoard.test.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalWorkflowBoard.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalWorkflowHistory.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalWorkflowPanel.test.tsx — in-file modification notice
+- frontend/src/renderer/components/LocalWorkflowPanel.tsx — in-file modification notice
+- frontend/src/renderer/components/MigrationPopup.test.tsx — in-file modification notice
+- frontend/src/renderer/components/ProjectSettingsEditor.tsx — in-file modification notice
+- frontend/src/renderer/components/ProjectSettingsForm.test.tsx — in-file modification notice
+- frontend/src/renderer/components/ProjectSettingsForm.tsx — in-file modification notice
+- frontend/src/renderer/components/RestartToUpdateDialog.test.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionInspector.test.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionInspector.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionMemoryPanel.test.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionView.remote.test.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionsBoard.test.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionsBoard.tsx — in-file modification notice
+- frontend/src/renderer/components/SessionsBoardAdapters.tsx — in-file modification notice
+- frontend/src/renderer/components/SettingsDialog.integration.test.tsx — in-file modification notice
+- frontend/src/renderer/components/ShellTopbar.navigation.test.tsx — in-file modification notice
+- frontend/src/renderer/components/Sidebar.test.tsx — in-file modification notice
+- frontend/src/renderer/components/Sidebar.tsx — in-file modification notice
+- frontend/src/renderer/components/SwitchAgentDialog.test.tsx — in-file modification notice
+- frontend/src/renderer/components/TerminalPane.test.tsx — in-file modification notice
+- frontend/src/renderer/components/TerminalPane.tsx — in-file modification notice
+- frontend/src/renderer/components/TitlebarNav.tsx — in-file modification notice
+- frontend/src/renderer/components/chat/ChatMarkdown.test.tsx — in-file modification notice
+- frontend/src/renderer/components/chat/ChatPromptSuggestion.test.tsx — in-file modification notice
+- frontend/src/renderer/components/chat/ComposerEditor.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/BrowserImportDialog.test.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/CodexAccountsSection.test.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/HarnessSettingsSection.test.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/RemoteHostsSettings.test.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/ReportProblemContent.test.tsx — in-file modification notice
+- frontend/src/renderer/components/settings/ReportProblemContent.tsx — in-file modification notice
+- frontend/src/renderer/components/ui/sidebar.tsx — in-file modification notice
+- frontend/src/renderer/hooks/use-local-workflow.test.tsx — in-file modification notice
+- frontend/src/renderer/hooks/use-local-workflow.ts — in-file modification notice
+- frontend/src/renderer/hooks/useProjectNavigationPersistence.test.tsx — in-file modification notice
+- frontend/src/renderer/hooks/useProjectNavigationPersistence.ts — in-file modification notice
+- frontend/src/renderer/hooks/useWorkspaceQuery.test.tsx — in-file modification notice
+- frontend/src/renderer/hooks/useWorkspaceQuery.ts — in-file modification notice
+- frontend/src/renderer/i18n/de.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/en.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/es.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/fr.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/instance.test.ts — in-file modification notice
+- frontend/src/renderer/i18n/ja.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/ko.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/pt-BR.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/i18n/zh-CN.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- frontend/src/renderer/lib/api-client.test.ts — in-file modification notice
+- frontend/src/renderer/lib/bridge.ts — in-file modification notice
+- frontend/src/renderer/lib/cloud-cp/renderer-client.ts — in-file modification notice
+- frontend/src/renderer/lib/daemon-failure.test.ts — in-file modification notice
+- frontend/src/renderer/lib/event-transport.test.ts — generated or data artifact; fork provenance in this notice
+- frontend/src/renderer/lib/event-transport.ts — in-file modification notice
+- frontend/src/renderer/lib/local-workflow-api.test.ts — in-file modification notice
+- frontend/src/renderer/lib/local-workflow-api.ts — in-file modification notice
+- frontend/src/renderer/lib/project-history.ts — in-file modification notice
+- frontend/src/renderer/lib/report-problem.test.ts — in-file modification notice
+- frontend/src/renderer/lib/report-problem.ts — in-file modification notice
+- frontend/src/renderer/lib/session-reviews.test.ts — in-file modification notice
+- frontend/src/renderer/lib/session-reviews.ts — in-file modification notice
+- frontend/src/renderer/lib/shell-context.ts — in-file modification notice
+- frontend/src/renderer/lib/spawn-orchestrator.test.ts — in-file modification notice
+- frontend/src/renderer/routes/_shell.tsx — in-file modification notice
+- frontend/src/renderer/test/setup.ts — in-file modification notice
+- frontend/src/renderer/test/shell-new-session-shortcut.test.tsx — in-file modification notice
+- frontend/src/renderer/types/workspace.ts — in-file modification notice
+- frontend/src/shared/cli-link.ts — in-file modification notice
+- frontend/src/shared/daemon-launch.test.ts — in-file modification notice
+- frontend/src/shared/daemon-launch.ts — in-file modification notice
+- frontend/src/shared/daemon-startup-status.test.ts — in-file modification notice
+- frontend/src/shared/daemon-startup-status.ts — in-file modification notice
+- frontend/src/shared/local-workflow-decisions.ts — in-file modification notice
+- frontend/src/shared/product.ts — in-file modification notice
+- go.work.sum — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- package.json — Data, lockfile, binary or company artwork; exact modification/provenance manifest accompanies it without changing its schema/bytes.
+- packages/build-binaries.sh — in-file modification notice
+- scripts/bootstrap-self-hosted.sh — in-file modification notice
+- scripts/ci/changes.mjs — in-file modification notice
+- scripts/ci/ci.test.mjs — in-file modification notice
+- scripts/ci/required.mjs — in-file modification notice
+- scripts/setup-self-hosted.sh — in-file modification notice
+- scripts/setup-self-hosted.test.sh — in-file modification notice
+- test/cli/Dockerfile — in-file modification notice
+- test/cli/install-check.sh — in-file modification notice
+- test/cli/proxy/main.go — in-file modification notice
+- test/cli/proxy/main_test.go — in-file modification notice
+- translations/README.de.md — in-file modification notice
+- translations/README.es.md — in-file modification notice
+- translations/README.fr.md — in-file modification notice
+- translations/README.ja.md — in-file modification notice
+- translations/README.ko.md — in-file modification notice
+- translations/README.pt-BR.md — in-file modification notice
+- translations/README.zh-CN.md — in-file modification notice
+
+Additional modified-file entries, 2026-10-20 (OB-8, OB-9 and OB-10 closeout):
+- backend/internal/adapters/agent/claudecode/auth.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/agent/claudecode/auth_launch_diagnostics_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/background_policy.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/background_policy_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/driver.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/driver_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/normalize.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/chatdriver/codexappserver/normalize_provider_access_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/adapters/reviewer/claudecode/provider_recovery_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/domain/local_workflow_provider_retry.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/domain/provider_access.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/domain/provider_access_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/httpd/controllers/local_workflow_provider_retry_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/localworkflow/provider_retry.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/localworkflow/provider_retry_config_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/localworkflow/provider_retry_recovery_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/localworkflow/provider_retry_stale_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/localworkflow/provider_retry_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/review/provider_recovery.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/review/provider_recovery_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/service/chat/background.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/service/chat/background_provider_access_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/service/review/provider_recovery.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- backend/internal/storage/sqlite/store/local_workflow_provider_retry_test.go — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- docs/ob-1-final-acceptance.md — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- docs/ob-8-first-run.md — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- docs/superpowers/plans/2026-10-20-ob1-final-acceptance.md — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- frontend/src/renderer/components/LocalWorkflowProviderRetry.test.tsx — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- frontend/src/renderer/components/LocalWorkflowProviderRetry.tsx — Fork modification by Gama Software, 2026; source and verification changes for local workflow and final acceptance.
+- frontend/src/renderer/lib/notifications.ts — Fork modification by Gama Software, 2026 (OB-10); preserve live notification delivery when a snapshot precedes its SSE event.
+- frontend/src/renderer/lib/notifications.test.ts — Fork modification by Gama Software, 2026 (OB-10); regression coverage for notification snapshot and live-event ordering.

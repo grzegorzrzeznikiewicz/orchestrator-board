@@ -1,4 +1,6 @@
 # OB-6 — decyzja człowieka i trwała historia
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Data odbioru: 2026-10-17. Branch `feature/OB-6`, baza `3324f32`.
 Status: implementacja, niezależny review i lokalne bramki zakończone; publikacja PR oraz weryfikacja zdalnego CI w toku. Epika OB-1 pozostaje otwarta.

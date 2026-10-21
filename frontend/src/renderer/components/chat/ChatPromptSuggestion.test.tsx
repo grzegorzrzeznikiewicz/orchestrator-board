@@ -1,3 +1,4 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -15,6 +16,53 @@ function renderComposer(props: Partial<Parameters<typeof ChatComposer>[0]> = {})
 }
 
 describe("next-message suggestion", () => {
+	it("inserts a clicked suggestion into the saved editable draft without sending", async () => {
+		const sessionId = "prompt-suggestion-click";
+		const { field, onSend } = renderComposer({ draftSessionId: sessionId });
+		await userEvent.click(screen.getByRole("button", { name: "Use suggestion" }));
+		expect(lexicalEditorText(field)).toBe(suggestion.text);
+		expect(readChatSessionDraft(sessionId).composer.text).toBe(suggestion.text);
+		expect(field).toHaveFocus();
+		expect(onSend).not.toHaveBeenCalled();
+		expect(screen.queryByTestId("prompt-suggestion")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
+		await typeInLexicalEditor(field, " Include regression coverage.");
+		await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+		await waitFor(() => expect(onSend).toHaveBeenCalledWith(`${suggestion.text} Include regression coverage.`, undefined, expect.any(String)));
+	});
+
+	it("accepts from the button with the keyboard without submitting and preserves undo", async () => {
+		const { field, onSend } = renderComposer();
+		screen.getByRole("button", { name: "Use suggestion" }).focus();
+		await userEvent.keyboard("{Enter}");
+		expect(lexicalEditorText(field)).toBe(suggestion.text);
+		expect(field).toHaveFocus();
+		expect(onSend).not.toHaveBeenCalled();
+		await userEvent.keyboard("{Control>}z{/Control}");
+		expect(lexicalEditorText(field)).toBe("");
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
+	});
+
+	it.each(["/review", "Summarize @README.md"])("preserves completion syntax in a clicked suggestion and restores its draft: %s", async (text) => {
+		const props = {
+			draftSessionId: `prompt-suggestion-click-restore-${text}`,
+			promptSuggestion: { id: `click-syntax-${text}`, text },
+			skills: [{ name: "review", displayName: "review", description: "Review changes", source: "user" as const }],
+			filePaths: ["README.md"],
+		};
+		const first = renderComposer(props);
+		await userEvent.click(screen.getByRole("button", { name: "Use suggestion" }));
+		expect(lexicalEditorText(first.field)).toBe(`${text} `);
+		expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+		expect(first.onSend).not.toHaveBeenCalled();
+		first.unmount();
+		const restored = renderComposer(props);
+		await waitFor(() => expect(lexicalEditorText(restored.field)).toBe(`${text} `));
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
+		await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+		await waitFor(() => expect(restored.onSend).toHaveBeenCalledWith(text, undefined, expect.any(String)));
+	});
+
 	it("shows ghost text outside the saved draft and inserts it with Tab before sending", async () => {
 		const sessionId = "prompt-suggestion-accept";
 		const { field, onSend } = renderComposer({ draftSessionId: sessionId });
@@ -86,6 +134,7 @@ describe("next-message suggestion", () => {
 		const { field, onSend, rerender } = renderComposer();
 		fireEvent.keyDown(field, { key: "Escape" });
 		expect(screen.queryByTestId("prompt-suggestion")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
 		fireEvent.keyDown(field, { key: "Tab" });
 		expect(lexicalEditorText(field)).toBe("");
 		rerender(<ChatComposer onSend={onSend} promptSuggestion={{ id: "reply-2", text: "Write the review comment." }} />);
@@ -97,6 +146,7 @@ describe("next-message suggestion", () => {
 		await typeAndPressInLexicalEditor(field, "My own message", "Tab");
 		expect(lexicalEditorText(field)).toBe("My own message");
 		expect(screen.queryByTestId("prompt-suggestion")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
 	});
 
 	it("keeps existing skill completion after typing dismisses the suggestion", async () => {
@@ -119,6 +169,7 @@ describe("next-message suggestion", () => {
 	])("hides suggestions when normal message entry is unavailable (%j)", (props) => {
 		renderComposer(props);
 		expect(screen.queryByTestId("prompt-suggestion")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Use suggestion" })).not.toBeInTheDocument();
 	});
 
 	it("keeps a restored draft when a suggestion arrives late", async () => {

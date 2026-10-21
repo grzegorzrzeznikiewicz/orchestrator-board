@@ -1,4 +1,6 @@
 # OB-4 Local Workflow Implementation Plan
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Recommended here: native execution with `executing-plans`; no subagents until the user chooses an execution method.
 

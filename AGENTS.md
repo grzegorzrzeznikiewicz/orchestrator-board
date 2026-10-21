@@ -1,4 +1,6 @@
 # OrchestratorBoard
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 ## Linki projektu
 

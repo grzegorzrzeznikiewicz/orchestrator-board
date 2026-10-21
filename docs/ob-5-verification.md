@@ -1,4 +1,6 @@
 # OB-5 — Kanban i historia lokalnego workflow
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Zadanie: [OB-5](https://gamasoftware.atlassian.net/browse/OB-5). Gałąź `feature/OB-5`, baza `c97060c` z main po OB-4. Implementację i odbiór wykonano w rzeczywistym katalogu projektu, bez dodatkowych worktree. Publikację gałęzi i scalenie użytkownik zatwierdził osobno po odbiorze zadania.
 

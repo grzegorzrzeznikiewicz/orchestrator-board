@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 set -euo pipefail
 
 script="$(cd "$(dirname "$0")" && pwd)/setup-self-hosted.sh"
@@ -59,17 +61,17 @@ case "${1:-}" in
 		python3 - "$tmp" "$digest" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-asset = {"name": "agent-orchestrator-linux-x64.AppImage", "browser_download_url": "https://example.test/stable", "digest": "sha256:" + sys.argv[2]}
+asset = {"name": "orchestrator-board-linux-x64.AppImage", "browser_download_url": "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/stable", "digest": "sha256:" + sys.argv[2]}
 stable = {"tag_name": "v1.0.0", "prerelease": False, "draft": False, "published_at": "2026-10-10T00:00:00Z", "assets": [asset]}
 def nightly(tag, date, url):
     return dict(stable, tag_name=tag, prerelease=True, published_at=date, assets=[dict(asset, browser_download_url=url)])
-old = nightly("v1.0.0-nightly.old", "2026-10-07T00:00:00Z", "https://example.test/old")
-new = nightly("v1.0.0-nightly.new", "2026-10-08T00:00:00Z", "https://example.test/new")
+old = nightly("v1.0.0-nightly.old", "2026-10-07T00:00:00Z", "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/old")
+new = nightly("v1.0.0-nightly.new", "2026-10-08T00:00:00Z", "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/new")
 draft = dict(new, draft=True, published_at="2026-10-11T00:00:00Z")
 beta = dict(new, tag_name="v1.0.0-beta.1", published_at="2026-10-12T00:00:00Z")
 fixtures = {"stable": stable, "nightly": [old, stable, draft, beta, new], "empty": [stable, draft, beta],
             "missing-asset": [dict(new, assets=[])], "missing-digest": [dict(new, assets=[dict(asset, digest=None)])],
-            "bad-digest": [dict(new, assets=[dict(asset, digest="sha256:" + "0" * 64)])]}
+            "bad-digest": [dict(new, assets=[dict(asset, digest="sha256:" + "0" * 64)])], "foreign-url": [dict(new, assets=[dict(asset, browser_download_url="https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.0/foreign.AppImage")])]}
 for name, data in fixtures.items():
     (root / (name + ".json")).write_text(json.dumps(data))
 PY
@@ -79,29 +81,30 @@ PY
 			'case "$url" in' \
 			'  */releases/latest) cp "$TEST_RELEASE_FIXTURES/stable.json" "$out" ;;' \
 			'  */releases\?per_page=100) cp "$TEST_RELEASE_FIXTURES/$TEST_RELEASE_CASE.json" "$out" ;;' \
-			'  https://example.test/*) cp "$TEST_RELEASE_FIXTURES/app.AppImage" "$out" ;;' \
+			'  https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/*) cp "$TEST_RELEASE_FIXTURES/app.AppImage" "$out" ;;' \
 			'  *) exit 1 ;;' 'esac' > "$tmp/bin/curl"
 		chmod +x "$tmp/bin/curl"
-		for fixture in stable nightly empty missing-asset missing-digest bad-digest; do
+		for fixture in stable nightly empty missing-asset missing-digest bad-digest foreign-url; do
 			args=()
 			[[ "$fixture" == stable ]] || args+=(--nightly)
 			result=0
 			env PATH="$tmp/bin" AO_HOST_INSTALL_DIR="$tmp/host-$fixture" TEST_RELEASE_PACKAGE="$tmp/pkg" \
 				TEST_RELEASE_FIXTURES="$tmp" TEST_RELEASE_CASE="$fixture" TEST_CURL_LOG="$tmp/$fixture.urls" \
-				/bin/bash "$script" "${args[@]}" --install-only > "$tmp/out" 2>&1 || result=$?
+				/bin/bash "$script" ${args[@]+"${args[@]}"} --install-only > "$tmp/out" 2>&1 || result=$?
 			case "$fixture" in
 				stable|nightly)
 					[[ "$result" == 0 ]] || { cat "$tmp/out" >&2; exit 1; }
 					[[ -d "$(readlink "$tmp/host-$fixture/current")" ]]
 					expected=stable
 					[[ "$fixture" == stable ]] || expected=new
-					grep -Fxq "https://example.test/$expected" "$tmp/$fixture.urls"
+					grep -Fxq "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/$expected" "$tmp/$fixture.urls"
 					;;
 				*)
 					[[ "$result" != 0 && ! -e "$tmp/host-$fixture/current" ]]
 					case "$fixture" in
 						empty) grep -q 'No published nightly release' "$tmp/out" ;;
 						missing-asset|missing-digest) grep -q 'No verified release asset' "$tmp/out" ;;
+						foreign-url) grep -q 'Foreign release asset URL' "$tmp/out"; [[ "$(wc -l < "$tmp/$fixture.urls")" -eq 1 ]] ;;
 						bad-digest) grep -q 'Release SHA-256 mismatch' "$tmp/out" ;;
 					esac
 					;;
@@ -123,7 +126,7 @@ PY
 			[[ "$mode" == stable ]] || args+=(--nightly)
 			[[ "$mode" != nightly-lan ]] || args+=(--lan)
 			env PATH="$tmp/bin" TEST_INSTALLER="$tmp/installer" TEST_INSTALL_ARGS="$tmp/args" \
-				/bin/bash "$bootstrap" "${args[@]}" > "$tmp/out" 2>&1 || { cat "$tmp/out" >&2; exit 1; }
+				/bin/bash "$bootstrap" ${args[@]+"${args[@]}"} > "$tmp/out" 2>&1 || { cat "$tmp/out" >&2; exit 1; }
 			if [[ "$mode" == stable ]]; then
 				if grep -q -- '--nightly' "$tmp/args"; then exit 1; fi
 			else

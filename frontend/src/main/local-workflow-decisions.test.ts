@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { EventEmitter } from "node:events";
 import type { WebContents } from "electron";
 import { afterEach, describe, expect, it, vi } from "vitest";

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import AppKit
 import Darwin
 import CoreGraphics
@@ -36,7 +38,7 @@ final class ProgressController: NSObject, NSApplicationDelegate, NSWindowDelegat
         NSApp.setActivationPolicy(.accessory)
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 270),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Updating Agent Orchestrator"
+        window.title = "Updating Orchestrator Board"
         window.isReleasedWhenClosed = false
         window.delegate = self
         title.font = .systemFont(ofSize: 22, weight: .semibold)
@@ -80,7 +82,7 @@ final class ProgressController: NSObject, NSApplicationDelegate, NSWindowDelegat
 
     func legacyEvidence(now: Double) -> LegacyLaunchEvidence? {
         guard !processAlive(request.parentPID) else { return nil }
-        let markerURL = attempt.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("app-state.json")
+        let markerURL = attempt.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("orchestrator-board-app-state.json")
         guard let marker = readJSON(LegacyAppMarker.self, at: markerURL), marker.matchesLegacyLaunch(request, now: now) else { return nil }
         guard let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.processIdentifier != request.parentPID && !$0.isTerminated && $0.isFinishedLaunching &&
@@ -172,7 +174,7 @@ final class ProgressController: NSObject, NSApplicationDelegate, NSWindowDelegat
         refresh()
     }
     @objc func download() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/Untrivial-ai/agent-orchestrator/releases/latest")!)
+        NSWorkspace.shared.open(URL(string: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/latest")!)
     }
     @objc func closeWindow() { window.performClose(nil) }
     func windowWillClose(_ notification: Notification) {
@@ -192,7 +194,7 @@ guard CommandLine.arguments.count == 2 else { exit(2) }
 let attempt = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL
 let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.resolvingSymlinksInPath()
 guard attempt == attempt.resolvingSymlinksInPath(),
-      attempt.deletingLastPathComponent().lastPathComponent == "update-restart",
+      attempt.deletingLastPathComponent().lastPathComponent == "orchestrator-board-update-restart",
       attempt.lastPathComponent.hasPrefix("attempt-"),
       !attempt.pathComponents.contains(where: { $0.hasSuffix(".app") }),
       executable == attempt.appendingPathComponent("ao-update-progress"),

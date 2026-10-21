@@ -1,3 +1,9 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { resolveElectronUserData } from "./main/electron-user-data";
+import { readDesktopLaunchConfig } from "./main/desktop-launch-config";
+import { PRODUCT } from "./shared/product";
+import { showProductAbout } from "./main/product-about";
 import { createLocalWorkflowDecisionHost, registerLocalWorkflowDecisionIpc } from "./main/local-workflow-decisions";
 import { LOCAL_WORKFLOW_CONFIRM_ACTION } from "./shared/local-workflow-decisions";
 import { syncMacWindowButtons } from "./main/window-chrome";
@@ -210,8 +216,7 @@ process.stdout.on("error", ignoreStdStreamError);
 process.stderr.on("error", ignoreStdStreamError);
 
 // The name shown in window titles, the menu bar, the dock, and the About panel.
-// Packaged bundle and installer filenames are unchanged.
-const APP_DISPLAY_NAME = "Orchestrator.inc";
+const APP_DISPLAY_NAME = PRODUCT.productName;
 
 // Must run before app ready so the About panel and default-menu role labels use it.
 // Unpackaged runs get a distinct name so the dev window, dock menu, and About
@@ -223,7 +228,7 @@ app.setName(app.isPackaged ? APP_DISPLAY_NAME : `${APP_DISPLAY_NAME} (dev)`);
 // Notification.isSupported() still returns true but show() silently drops the
 // toast, so notifications never appear. No-op on macOS/Linux.
 if (process.platform === "win32") {
-	app.setAppUserModelId("dev.agent-orchestrator.desktop");
+	app.setAppUserModelId(PRODUCT.appId);
 }
 
 // Escape hatch for hosts whose GPU driver stack crashes Chromium on startup
@@ -238,33 +243,34 @@ if (disableGpu === "1" || disableGpu === "true" || disableGpu === "yes" || disab
 	app.disableHardwareAcceleration();
 }
 
-// Pin ALL Electron-owned state (Chromium cache, cookies, local/session storage,
-// crash dumps) under the canonical AO home at ~/.ao instead of Electron's macOS
-// default ~/Library/Application Support/<name>. Keeps the app's entire footprint
-// inside ~/.ao alongside the daemon's data dir and running.json. sessionData and
-// crashDumps derive from userData, so this one override reparents them all.
-// Must run before app ready.
-// Dev runs get their own profile under the same ~/.ao root: the packaged app
-// keeps this directory open, and two Chromium instances sharing one profile
-// corrupt its LevelDB stores. Mirrors how dev already isolates running.json and
-// the daemon data dir into ~/.ao/dev.
-// AO_DEV_ELECTRON_DIR overrides the dev profile location. The default dev path
-// is shared by every checkout, and Chromium puts a singleton lock in a profile,
-// so a second worktree's `npm run dev` loses requestSingleInstanceLock() and
-// exits immediately. That is a real constraint for a tool built around parallel
-// worktree sessions: two sessions could not both run the app. Packaged builds
-// are deliberately NOT overridable — their profile is part of the install.
-app.setPath(
-	"userData",
-	app.isPackaged
-		? path.join(os.homedir(), ".ao", "electron")
-		: (process.env.AO_DEV_ELECTRON_DIR ?? path.join(os.homedir(), ".ao", "dev", "electron")),
-);
+// Restore only an explicitly saved packaged-fork launch selection. Fail before
+// resolving userData or opening a daemon when a present selection is invalid.
+try {
+	Object.assign(process.env, readDesktopLaunchConfig({ env: process.env, homeDir: os.homedir(), isPackaged: app.isPackaged }));
+} catch (error) {
+	dialog.showErrorBox(`${APP_DISPLAY_NAME} could not start`, error instanceof Error ? error.message : "The saved launch configuration could not be read.");
+	app.exit(1);
+	throw error;
+}
 
-// Resolve once against the launch cwd, before the daemon can chdir. The exact
-// absolute value is shared by policy bootstrap and every daemon spawn.
+// Resolve once against the launch cwd before any daemon can chdir. The exact
+// absolute value is shared by policy bootstrap, the daemon and opt-in profiles.
 const desktopLaunchWorkingDirectory = process.cwd();
 const desktopDataDir = resolveDesktopDataDir(process.env, os.homedir(), desktopLaunchWorkingDirectory, app.isPackaged);
+
+// Keep encryption-backed fork state under ~/.ao with a distinct Chromium profile.
+// Electron keys safeStorage to app name on macOS/Linux, so opening the original
+// profile after rebranding can make its cookies unreadable. Never copy, open or
+// migrate that profile; only daemon projects/settings keep their existing root.
+// An explicit AO_DATA_DIR selects the same fork namespace under that data dir.
+// Set before ready and before Chromium's singleton lock touches the profile.
+app.setPath("userData", resolveElectronUserData({
+ env: process.env,
+ homeDir: os.homedir(),
+ desktopDataDir,
+ isPackaged: app.isPackaged,
+}));
+
 let telemetryPolicyController: DesktopTelemetryController | null = null;
 let agentSwitchVisibilityController: AgentSwitchVisibilityController | null = null;
 const trustedShellWebContents = new Map<number, WebContents>();
@@ -475,7 +481,7 @@ protocol.registerSchemesAsPrivileged([
 	},
 ]);
 
-// Register ao-app:// as the deep-link protocol for WorkOS auth callbacks.
+// Register the fork scheme as the deep-link protocol for WorkOS auth callbacks.
 // Must run before app.whenReady().
 registerCloudProtocol();
 if (!app.requestSingleInstanceLock()) {
@@ -799,7 +805,7 @@ async function createWindowInternal(): Promise<void> {
 	windowComposition = composition;
 	syncNativeWindowBackground();
 	const shellWebContents = getShellWebContents();
-	if (!shellWebContents) throw new Error("AO shell WebContents was not created");
+	if (!shellWebContents) throw new Error(`${APP_DISPLAY_NAME} shell WebContents was not created`);
 	trustedShellWebContents.set(shellWebContents.id, shellWebContents);
 	agentSwitchVisibilityController?.registerWindow(shellWebContents.id);
 	shellWebContents.once("destroyed", () => {
@@ -830,7 +836,7 @@ async function createWindowInternal(): Promise<void> {
 					void host.toggleDevToolsForLastFocused().then((state) => {
 						if (!state) fallback();
 					}).catch(fallback);
-				}),
+				}, () => { void showProductAbout(mainWindow); }),
 			),
 		);
 	} else if (process.platform === "linux") {
@@ -1136,7 +1142,7 @@ function runFilePath(): string | null {
 
 function editorStateDir(): string {
 	const runFile = runFilePath();
-	if (!runFile) throw new Error("AO state directory is not available.");
+	if (!runFile) throw new Error(`${APP_DISPLAY_NAME} state directory is not available.`);
 	return path.dirname(runFile);
 }
 
@@ -1152,7 +1158,7 @@ async function fetchDesktopSessionPath(
 	unavailableMessage: string,
 ): Promise<string> {
 	if (daemonStatus.state !== "ready" || !daemonStatus.port) {
-		throw workspaceCheckUnavailable("AO daemon is not ready.");
+		throw workspaceCheckUnavailable(`${APP_DISPLAY_NAME} daemon is not ready.`);
 	}
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), DAEMON_PROBE_TIMEOUT_MS);
@@ -1162,10 +1168,10 @@ async function fetchDesktopSessionPath(
 			{ signal: controller.signal },
 		).catch((error: unknown) => {
 			if (error instanceof Error && error.name === "AbortError") throw error;
-			throw workspaceCheckUnavailable("AO daemon is not reachable.");
+			throw workspaceCheckUnavailable(`${APP_DISPLAY_NAME} daemon is not reachable.`);
 		});
 		const body = await response.json().catch((error: unknown) => {
-			if (response.status >= 500) throw workspaceCheckUnavailable("AO daemon is not ready.");
+			if (response.status >= 500) throw workspaceCheckUnavailable(`${APP_DISPLAY_NAME} daemon is not ready.`);
 			throw error;
 		}) as Record<string, unknown>;
 		if (!response.ok) {
@@ -1489,12 +1495,12 @@ function daemonIdentityError(launch: DaemonLaunchSpec, probe: DaemonProbe): stri
 			: false;
 		const executableMatches = probe.executablePath ? canonicalPathInside(probe.executablePath, launch.cwd) : false;
 		if (!probe.workingDirectory && !probe.startupWorkingDirectory && !probe.executablePath) {
-			return "An older AO daemon is already running, but it does not report its checkout identity. Stop it and restart this app.";
+			return `An older ${APP_DISPLAY_NAME} daemon is already running, but it does not report its checkout identity. Stop it and restart this app.`;
 		}
 		if (!cwdMatches && !startupCwdMatches && !executableMatches) {
 			const actual =
 				probe.startupWorkingDirectory ?? probe.workingDirectory ?? probe.executablePath ?? "an unknown location";
-			return `Another AO daemon is already running from ${actual}; expected this checkout at ${launch.cwd}. Stop the other daemon before using this checkout.`;
+			return `Another ${APP_DISPLAY_NAME} daemon is already running from ${actual}; expected this checkout at ${launch.cwd}. Stop the other daemon before using this checkout.`;
 		}
 		return null;
 	}
@@ -1673,7 +1679,7 @@ async function refreshDaemonStatus(): Promise<DaemonStatus> {
 	) {
 		setDaemonStatus({
 			state: "stopped",
-			message: "AO daemon is no longer reachable.",
+			message: `${APP_DISPLAY_NAME} daemon is no longer reachable.`,
 			code: "daemon_unreachable",
 		});
 	}
@@ -1923,7 +1929,7 @@ async function startDaemonInner(startEpoch: number): Promise<DaemonStatus> {
 	if (launch.source === "bundled" && !existsSync(launch.command)) {
 		setDaemonStatus({
 			state: "error",
-			message: `Bundled AO daemon binary was not found at ${launch.command}. Rebuild the desktop package.`,
+			message: `Bundled ${APP_DISPLAY_NAME} daemon binary was not found at ${launch.command}. Rebuild the desktop package.`,
 			code: "binary_missing",
 		});
 		return daemonStatus;
@@ -1933,7 +1939,7 @@ async function startDaemonInner(startEpoch: number): Promise<DaemonStatus> {
 	} catch (err) {
 		setDaemonStatus({
 			state: "error",
-			message: `Could not stage AO's bundled tmux under the AO data directory: ${(err as Error).message}`,
+			message: `Could not stage ${APP_DISPLAY_NAME}'s bundled tmux under its data directory: ${(err as Error).message}`,
 			code: "binary_missing",
 		});
 		return daemonStatus;
@@ -1951,7 +1957,7 @@ async function startDaemonInner(startEpoch: number): Promise<DaemonStatus> {
 			// and leave the UI stuck on "starting". Report it as a failure instead.
 			setDaemonStatus({
 				state: "error",
-				message: `Could not create the AO data directory at ${launch.cwd}: ${(err as Error).message}`,
+				message: `Could not create the ${APP_DISPLAY_NAME} data directory at ${launch.cwd}: ${(err as Error).message}`,
 				code: "datadir_unwritable",
 			});
 			return daemonStatus;
@@ -2218,7 +2224,7 @@ function stopDaemon(): DaemonStatus {
 function reportDaemonRestartFailure(error: unknown): DaemonStatus {
 	setDaemonStatus({
 		state: "error",
-		message: `Could not restart the AO daemon: ${error instanceof Error ? error.message : String(error)}`,
+		message: `Could not restart the ${APP_DISPLAY_NAME} daemon: ${error instanceof Error ? error.message : String(error)}`,
 		details: daemonOutput.trim() || undefined,
 		code: "spawn_failed",
 	});
@@ -2263,7 +2269,7 @@ async function restartDaemon(): Promise<DaemonStatus> {
 		// a replacement instead of collapsing back to a code-less stopped state.
 		setDaemonStatus({
 			state: "error",
-			message: "AO daemon is still stopping. It will restart automatically when shutdown completes.",
+			message: `${APP_DISPLAY_NAME} daemon is still stopping. It will restart automatically when shutdown completes.`,
 			details: daemonOutput.trim() || undefined,
 			code: "not_ready",
 		});
@@ -2518,13 +2524,7 @@ ipcMain.handle("menu:action", (_event, action: string) => {
 			shell?.focus();
 			return shell?.send(KEYBOARD_SHORTCUTS_HELP_CHANNEL);
 		case "help.about":
-			void dialog.showMessageBox(win, {
-				type: "info",
-				title: `About ${APP_DISPLAY_NAME}`,
-				message: APP_DISPLAY_NAME,
-				detail: `Version ${app.getVersion()}`,
-				buttons: ["OK"],
-			});
+			void showProductAbout(win);
 			return;
 	}
 });
@@ -2846,10 +2846,13 @@ function cancelDockBounce(): void {
 ipcMain.handle(
 	"notifications:show",
 	(_event, notification: { id: string; title: string; body?: string; type?: string; watched?: boolean }) => {
+		const diagnostics = process.env.AO_NOTIFICATION_DIAGNOSTICS === "1";
+		if (diagnostics) console.info("[notification-diagnostic]", JSON.stringify({ stage: "received", id: notification.id, type: notification.type, windowPresent: Boolean(mainWindow) }));
 		if (!notification.id || !mainWindow) return;
 		// "Already looking" = the window has focus, or the renderer reports the
 		// prompt itself is on screen (`watched`). Visual signals are skipped then.
 		const looking = mainWindow.isFocused() || notification.watched === true;
+		if (diagnostics) console.info("[notification-diagnostic]", JSON.stringify({ stage: "attention-policy", id: notification.id, focused: mainWindow.isFocused(), watched: notification.watched === true, minimized: mainWindow.isMinimized(), suppressed: looking }));
 		// On Linux the sound ignores that guess: Wayland gives apps no reliable
 		// visibility, so a window parked on another workspace still reports
 		// focused/visible and would otherwise stay silent. macOS and Windows
@@ -2863,7 +2866,9 @@ ipcMain.handle(
 		// OS toast: a native banner the user can click to jump straight back to the
 		// session. Fires for every backend notification type (see shouldToast), so a
 		// new type in notification.go never silently loses its toast.
-		if (shouldToast(notification, ElectronNotification.isSupported())) {
+		const nativeSupported = ElectronNotification.isSupported();
+		if (diagnostics) console.info("[notification-diagnostic]", JSON.stringify({ stage: "native-policy", id: notification.id, supported: nativeSupported, hasTitle: Boolean(notification.title) }));
+		if (shouldToast(notification, nativeSupported)) {
 			const toast = new ElectronNotification({
 				title: notification.title,
 				body: notification.body,
@@ -2884,6 +2889,11 @@ ipcMain.handle(
 				mainWindow.focus();
 				getShellWebContents()?.send("notifications:click", notification.id);
 			});
+			if (diagnostics) {
+				toast.once("show", () => console.info("[notification-diagnostic]", JSON.stringify({ stage: "native-show", id: notification.id })));
+				toast.once("failed", () => console.info("[notification-diagnostic]", JSON.stringify({ stage: "native-failed", id: notification.id })));
+				toast.once("click", () => console.info("[notification-diagnostic]", JSON.stringify({ stage: "native-click", id: notification.id })));
+			}
 			toast.show();
 		}
 
@@ -3058,13 +3068,13 @@ async function handleCloudDeepLinkAndFocus(url: string): Promise<void> {
 function isBillingDeepLink(raw: string): boolean {
 	try {
 		const url = new URL(raw);
-		return url.protocol === "ao-app:" && url.hostname === "billing";
+		return url.protocol === `${PRODUCT.authProtocol}:` && url.hostname === "billing";
 	} catch {
 		return false;
 	}
 }
 
-// macOS: the OS sends the ao-app:// URL via the open-url event when the app is
+// macOS: the OS sends the fork URL via the open-url event when the app is
 // already running. If the app is not running, the URL is passed in process.argv
 // on first launch (handled in app.whenReady below).
 app.on("open-url", (event, url) => {
@@ -3073,7 +3083,7 @@ app.on("open-url", (event, url) => {
 });
 
 app.on("second-instance", (_event, argv) => {
-	const deepLink = argv.find((value) => value.startsWith("ao-app://"));
+	const deepLink = argv.find((value) => value.startsWith(`${PRODUCT.authProtocol}://`));
 	if (deepLink) {
 		void handleCloudDeepLinkAndFocus(deepLink);
 		return;
@@ -3124,7 +3134,7 @@ function initAutoUpdates(): void {
 }
 
 // Resolve the bundle path `ao start` will later `open` and stat as a usable app.
-// On macOS process.execPath is .../Agent Orchestrator.app/Contents/MacOS/<exe>;
+// On macOS process.execPath is .../Orchestrator Board.app/Contents/MacOS/<exe>;
 // the thing `ao start` opens is the enclosing `.app` directory, so walk up three
 // levels (MacOS -> Contents -> .app). app.getAppPath() is WRONG here: it returns
 // the app.asar archive path inside the bundle, not the bundle itself.
@@ -3145,7 +3155,7 @@ function parseInstalledVia(argv: string[]): string | undefined {
 	return flag ? flag.slice("--installed-via=".length) : undefined;
 }
 
-// Write ~/.ao/app-state.json so `ao start`'s resolveApp() can find this bundle
+// Write ~/.ao/orchestrator-board-app-state.json so `ao start`'s resolveApp() can find this bundle
 // (spec §7.1). The app is the sole writer (invariant 3) and writes every launch.
 // A failure here must NOT block startup, so the caller wraps this in try/catch;
 // we still surface it via the log.
@@ -3220,6 +3230,7 @@ app.whenReady().then(async () => {
 		const action = decideRelocation({
 			inApplicationsFolder: app.isInApplicationsFolder(),
 			runningVersion: app.getVersion(),
+			runningBundlePath: bundlePath,
 			...inspectInstalledBundle(bundlePath),
 		});
 		if (action === "handoff") {
@@ -3270,9 +3281,9 @@ app.whenReady().then(async () => {
 					buttons: ["Move old copies to Trash", "Not now"],
 					defaultId: 0,
 					cancelId: 1,
-					title: "Remove old AO copies",
+					title: `Remove old ${APP_DISPLAY_NAME} copies`,
 					message: `Old copies of ${APP_DISPLAY_NAME} can replace your updated app.`,
-					detail: `${formatStaleAppCopies(copies)}\n\nMove these copies to Trash to prevent another downgrade. Your AO projects and sessions will not be removed.`,
+					detail: `${formatStaleAppCopies(copies)}\n\nMove these copies to Trash to prevent another downgrade. Your ${APP_DISPLAY_NAME} projects and sessions will not be removed.`,
 					noLink: true,
 				});
 				return result.response === 0;
@@ -3283,8 +3294,8 @@ app.whenReady().then(async () => {
 					type: "warning",
 					buttons: ["OK"],
 					defaultId: 0,
-					title: "Some old copies could not be removed",
-					message: "Move these copies to Trash manually before launching AO again.",
+					title: `Some old ${APP_DISPLAY_NAME} copies could not be removed`,
+					message: `Move these copies to Trash manually before launching ${APP_DISPLAY_NAME} again.`,
 					detail: paths.join("\n"),
 					noLink: true,
 				});
@@ -3331,7 +3342,7 @@ app.whenReady().then(async () => {
 
 	// Windows/Linux: on first launch, the deep-link URL may arrive as a
 	// process.argv entry (e.g. ao-app://callback?token=...).
-	const deepLinkArg = process.argv.find((a) => a.startsWith("ao-app://"));
+	const deepLinkArg = process.argv.find((a) => a.startsWith(`${PRODUCT.authProtocol}://`));
 	if (deepLinkArg) {
 		void handleCloudDeepLinkAndFocus(deepLinkArg);
 	}

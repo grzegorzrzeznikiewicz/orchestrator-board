@@ -1,3 +1,7 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -762,15 +766,15 @@ describe("GlobalSettingsForm", () => {
 		expect(screen.queryByLabelText("Report preview")).not.toBeInTheDocument();
 
 		expect(screen.getByRole("button", { name: /copy & create github issue/i })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: /copy & open discord/i })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: /copy & open email/i })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /copy & open discord/i })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /copy & open email/i })).not.toBeInTheDocument();
 		expect(screen.getByLabelText("What happened?")).toHaveClass("resize-none");
 		await user.click(screen.getByRole("button", { name: /copy & create github issue/i }));
 
 		await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
 		const copied = writeText.mock.calls[0][0] as string;
 		expect(copied).toContain("Create project fails");
-		expect(copied).toContain("AO version: 9.9.9-test");
+		expect(copied).toContain("Orchestrator Board version: 9.9.9-test");
 		expect(copied).toContain("Daemon: ready");
 		expect(copied).toContain("[redacted-local-path]");
 		expect(copied).toContain("[redacted-local-url]");
@@ -779,60 +783,43 @@ describe("GlobalSettingsForm", () => {
 		expect(copied).not.toContain("## Type");
 		expect(copied).not.toContain("Generated locally by AO");
 		expect(openExternal).toHaveBeenCalledWith(
-			expect.stringContaining("https://github.com/Untrivial-ai/agent-orchestrator/issues/new"),
+			expect.stringContaining("https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues/new"),
 		);
 		expect(open).not.toHaveBeenCalled();
 		expect(screen.getByLabelText("Title")).toHaveValue("");
 		expect(screen.getByLabelText("What happened?")).toHaveValue("");
 	});
 
-	it("opens Discord support and lets Windows users choose an email provider", async () => {
+	it("opens the fork issue page with fallback diagnostics when native status is unavailable", async () => {
 		const user = userEvent.setup();
-		const open = vi.spyOn(window, "open").mockReturnValue(null);
 		getVersion.mockRejectedValue(new Error("version unavailable"));
 		getDaemonStatus.mockRejectedValue(new Error("daemon unavailable"));
 		renderForm();
-
 		await user.type(await screen.findByLabelText("Title"), "Need help with setup");
 		await user.type(screen.getByLabelText("What happened?"), "The setup flow stalls after the first prompt.");
-
-		expect(screen.getByRole("button", { name: /copy & open discord/i })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: /copy & open email/i })).toBeInTheDocument();
-		await user.click(screen.getByRole("button", { name: /copy & open discord/i }));
+		await user.click(screen.getByRole("button", { name: /copy & create github issue/i }));
 		await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-		expect(writeText.mock.calls[0][0]).toContain("**AO feedback**");
-		expect(screen.getByText("Discord draft copied.")).toBeInTheDocument();
+		expect(writeText.mock.calls[0][0]).toContain("Orchestrator Board version: unknown");
+		expect(writeText.mock.calls[0][0]).toContain("Daemon: unknown");
+		expect(writeText.mock.calls[0][0]).not.toContain("untrivial.ai");
+		expect(openExternal).toHaveBeenCalledTimes(1);
+		const destination = new URL(openExternal.mock.calls[0][0]);
+		expect(`${destination.origin}${destination.pathname}`).toBe("https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues/new");
 		expect(screen.getByLabelText("Title")).toHaveValue("");
 		expect(screen.getByLabelText("What happened?")).toHaveValue("");
-
-		expect(screen.getByRole("button", { name: /copy & open email/i })).toBeDisabled();
-		await user.type(screen.getByLabelText("Title"), "Need help with setup");
-		expect(screen.queryByText("Discord draft copied.")).not.toBeInTheDocument();
-		await user.type(screen.getByLabelText("What happened?"), "The setup flow stalls after the first prompt.");
-		await user.click(screen.getByRole("button", { name: /copy & open email/i }));
-		await user.click(await screen.findByRole("menuitem", { name: "Gmail" }));
-
-		await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-		expect(writeText.mock.calls[0][0]).toContain("Daemon: unknown");
-		expect(writeText.mock.calls[1][0]).toContain("To: prasad@untrivial.ai");
-		expect(writeText.mock.calls[1][0]).toContain("AO feedback");
-		expect(openExternal).toHaveBeenCalledWith("https://discord.gg/WjKNa7EbB8");
-		expect(openExternal).toHaveBeenCalledWith(expect.stringContaining("https://mail.google.com/mail/"));
-		expect(open).not.toHaveBeenCalled();
 	});
 
-	it("keeps the direct system email handoff outside Windows", async () => {
+	it.each([true, false])("hides unconfigured upstream Discord and email support on Windows=%s", async (windows) => {
 		const user = userEvent.setup();
-		isWindowsPlatform.mockReturnValue(false);
+		isWindowsPlatform.mockReturnValue(windows);
 		renderForm();
-
 		await user.type(await screen.findByLabelText("Title"), "Need help with setup");
 		await user.type(screen.getByLabelText("What happened?"), "The setup flow stalls after the first prompt.");
-		await user.click(screen.getByRole("button", { name: /copy & open email/i }));
-
-		await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-		expect(openExternal).toHaveBeenCalledWith(expect.stringContaining("mailto:prasad@untrivial.ai"));
+		expect(screen.getByRole("button", { name: /copy & create github issue/i })).toBeEnabled();
+		expect(screen.queryByRole("button", { name: /copy & open discord/i })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /copy & open email/i })).not.toBeInTheDocument();
 		expect(screen.queryByRole("menuitem", { name: "Gmail" })).not.toBeInTheDocument();
+		expect(openExternal).not.toHaveBeenCalled();
 	});
 
 	it("keeps the report form to title and details while tailoring placeholder guidance", async () => {

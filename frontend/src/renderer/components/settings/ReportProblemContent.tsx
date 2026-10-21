@@ -1,3 +1,7 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { useTranslation } from "react-i18next";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
@@ -61,11 +65,13 @@ type DestinationOption = {
 
 export function ReportProblemContent({ active }: { active: boolean }) {
 	const { t } = useTranslation();
-	const destinations: DestinationOption[] = [
+	const allDestinations: DestinationOption[] = [
 		{ value: "github", label: t("report.github"), action: t("report.githubAction"), icon: GithubIcon },
 		{ value: "discord", label: t("report.discord"), action: t("report.discordAction"), icon: DiscordIcon },
 		{ value: "email", label: t("report.email"), action: t("report.emailAction"), icon: EmailIcon },
 	];
+	// Only GitHub support is configured for this fork; upstream contacts are not ours.
+	const destinations = allDestinations.filter((option) => option.value === "github");
 	const titleId = useId();
 	const detailsId = useId();
 	const titleRef = useRef<HTMLInputElement>(null);

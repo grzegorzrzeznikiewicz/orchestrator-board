@@ -135,6 +135,15 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 	useMatch: () => undefined,
 	useMatchRoute: () => (options: { to: string }) => shellMocks.state.matchRouteTarget === options.to,
 	useNavigate: () => shellMocks.navigate,
+	useLocation: (options?: { select?: (location: { pathname: string }) => unknown }) => {
+		const { hostId, projectId, sessionId } = shellMocks.state.routeParams;
+		const prefix = hostId ? `/host/${hostId}` : "";
+		let pathname = shellMocks.state.matchRouteTarget ?? "/";
+		if (projectId) pathname = `${prefix}/${hostId ? "project" : "projects"}/${projectId}${sessionId ? `/${hostId ? "session" : "sessions"}/${sessionId}` : ""}`;
+		else if (sessionId) pathname = `${prefix}/${hostId ? "session" : "sessions"}/${sessionId}`;
+		const location = { pathname };
+		return options?.select ? options.select(location) : location;
+	},
 	useRouter: () => shellMocks.router,
 	useParams: () => shellMocks.state.routeParams,
 	useSearch: () => shellMocks.state.routeSearch,
@@ -419,6 +428,7 @@ beforeEach(() => {
 	shellMocks.state.previousSessionListener = undefined;
 	shellMocks.state.nextSessionListener = undefined;
 	shellMocks.state.openFolderPathListener = undefined;
+	window.localStorage.removeItem("ao.project-history");
 	shellMocks.state.routeParams = {};
 	shellMocks.state.routeSearch = {};
 	shellMocks.state.matchRouteTarget = null;

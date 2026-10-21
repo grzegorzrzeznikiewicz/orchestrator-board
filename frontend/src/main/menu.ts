@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../shared/product";
 import type { MenuItemConstructorOptions } from "electron";
 
 // Electron's built-in toggleDevTools role assumes the focused surface belongs
@@ -9,9 +12,16 @@ import type { MenuItemConstructorOptions } from "electron";
 // window whenever a tab or terminal close races the native menu. Multi-tab
 // macOS applications (Safari, Chrome, VS Code) bind Shift+Command+W to "Close Window"
 // so Command+W remains scoped to tabs and terminals.
-export function buildMacAppMenuTemplate(onToggleDevTools: () => void): MenuItemConstructorOptions[] {
+export function buildMacAppMenuTemplate(onToggleDevTools: () => void, onAbout?: () => void): MenuItemConstructorOptions[] {
 	return [
-		{ role: "appMenu" },
+		{ role: "appMenu", ...(onAbout ? { submenu: [
+   { label: `About ${PRODUCT.productName}`, click: onAbout },
+   { type: "separator" as const },
+   { role: "services" as const },
+   { type: "separator" as const },
+   { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const },
+   { type: "separator" as const }, { role: "quit" as const },
+  ] } : {}) },
 		{
 			role: "fileMenu",
 			submenu: [

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { aoBridge } from "../lib/bridge";
@@ -23,7 +25,7 @@ describe("DaemonFailureBanner", () => {
 			/>,
 		);
 
-		expect(screen.getByRole("alert")).toHaveTextContent("AO daemon failed to start");
+		expect(screen.getByRole("alert")).toHaveTextContent("Orchestrator Board daemon failed to start");
 		expect(screen.getByRole("alert")).toHaveTextContent("AO daemon exited with code 1");
 		expect(screen.getByText("exited")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Restart daemon" })).toBeInTheDocument();
@@ -71,14 +73,14 @@ describe("DaemonFailureBanner", () => {
 			<DaemonFailureBanner
 				status={{
 					state: "starting",
-					message: "AO daemon is still starting. Session recovery can take a while.",
+					message: "Orchestrator Board daemon is still starting. Session recovery can take a while.",
 					details: "restoring session mer-3",
 				}}
 			/>,
 		);
 
-		expect(screen.getByRole("status")).toHaveTextContent("AO daemon is not ready yet");
-		expect(screen.getByRole("status")).toHaveTextContent("AO daemon is still starting");
+		expect(screen.getByRole("status")).toHaveTextContent("Orchestrator Board daemon is not ready yet");
+		expect(screen.getByRole("status")).toHaveTextContent("Orchestrator Board daemon is still starting");
 		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Restart daemon" })).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Show details" }));
@@ -92,7 +94,7 @@ describe("DaemonFailureBanner", () => {
 		await act(() => appI18n.changeLanguage("zh-CN"));
 
 		expect(screen.getByRole("button", { name: "重启守护进程" })).toBeInTheDocument();
-		expect(screen.getByRole("alert")).toHaveTextContent("AO 守护进程尚未就绪");
+		expect(screen.getByRole("alert")).toHaveTextContent("Orchestrator Board 守护进程尚未就绪");
 	});
 
 	it("restarts a daemon that timed out during startup", async () => {

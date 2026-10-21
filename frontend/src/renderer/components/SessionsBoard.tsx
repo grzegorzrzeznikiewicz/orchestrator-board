@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { LocalWorkflowBoard } from "./LocalWorkflowBoard";
 import { OrchestratorStartingChat } from "./chat/OrchestratorStartingChat";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
@@ -31,7 +33,7 @@ import { useRestoreSession } from "../hooks/useRestoreSession";
 import { useTerminateSession } from "../hooks/useTerminateSession";
 import { useRemoteProjectQuery, useWorkspaceQuery, workspaceQueryKeyForHost } from "../hooks/useWorkspaceQuery";
 import { NotificationCenter } from "./NotificationCenter";
-import { BoardWelcome, ProjectBoardEmpty } from "./BoardEmptyStates";
+import { BoardWelcome } from "./BoardEmptyStates";
 import { TopbarButton, topbarProjectLabelClass } from "./TopbarButton";
 import { restartProjectOrchestrator } from "../lib/restart-orchestrator";
 import { usesPreviewWorkspaceData } from "../lib/preview-mode";
@@ -273,7 +275,7 @@ export function SessionsBoard({ projectId, hostId }: SessionsBoardProps) {
 
 			{/* Reserve only the collapsed archive bar. Expanded archive overlays the
 			    board so lane height (and Needs You scrollbars) stay stable. */}
-			<div className={cn("min-h-0 flex-1 overflow-hidden", hasArchive && archiveToggleOffsetClassName)}>
+			<div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", hasArchive && archiveToggleOffsetClassName)}>
 				{projectId && health.state !== "ok" && (!hostId || connected && (health.state !== "missing" || hasConfiguredOrchestratorAgent(workspace))) ? (
 					<div className="mx-3 my-3 flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
 						<AlertTriangle className="size-icon-base shrink-0 text-warning" aria-hidden="true" />
@@ -310,10 +312,15 @@ export function SessionsBoard({ projectId, hostId }: SessionsBoardProps) {
 					<p className="py-10 text-center text-xs text-passive">{t("shell.couldNotLoadSessions")}</p>
 				) : hostId && !workspace ? null : showWelcome ? (
 				<BoardWelcome />
-				) : showProjectEmpty ? (
-					<ProjectBoardEmpty actions={<ProjectBoardActions actions={projectActions} placement="empty" />} />
 				) : (
-					<div className={cn("flex h-full min-h-0 flex-col gap-3", localBoardSessions.length > 0 && prBoardSessions.length > 0 && "overflow-y-auto")}>
+					<div className={cn("flex min-h-0 flex-1 flex-col gap-3", (showProjectEmpty || localBoardSessions.length > 0 && prBoardSessions.length > 0) && "overflow-y-auto")}>
+						{showProjectEmpty ? (
+							<div className="shrink-0 px-4 py-4" data-testid="project-board-empty">
+								<h2 className="text-subtitle font-semibold tracking-tight text-foreground">{t("board.empty.title")}</h2>
+								<p className="mt-2 text-md-sm leading-relaxed text-muted-foreground">{t("board.empty.body")}</p>
+								<ProjectBoardActions actions={projectActions} placement="empty" />
+							</div>
+						) : null}
 						{(localBoardSessions.length > 0 || workspace?.reviewMode === "local") && (
 							<LocalWorkflowBoard
 								hostId={hostId}

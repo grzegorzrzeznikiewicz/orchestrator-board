@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package localsnapshot captures exact Git working contents without modifying
 // the source index, creating commits, or creating another Git worktree.
 package localsnapshot

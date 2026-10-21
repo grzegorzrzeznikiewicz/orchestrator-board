@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 # Install AO's daemon resources from a desktop release or a locally built host bundle.
 set -euo pipefail
 
@@ -76,9 +78,9 @@ trap cleanup EXIT
 platform="$(uname -s)"
 arch="$(uname -m)"
 case "$platform:$arch" in
-	Darwin:arm64) asset='agent-orchestrator-darwin-arm64.zip' ;;
-	Darwin:x86_64) asset='agent-orchestrator-darwin-x64.zip' ;;
-	Linux:x86_64) asset='agent-orchestrator-linux-x64.AppImage' ;;
+	Darwin:arm64) asset='orchestrator-board-darwin-arm64.zip' ;;
+	Darwin:x86_64) asset='orchestrator-board-darwin-x64.zip' ;;
+	Linux:x86_64) asset='orchestrator-board-linux-x64.AppImage' ;;
 	Linux:aarch64|Linux:arm64) if [[ -z "$bundle" ]]; then
 		printf 'No published desktop artifact for %s/%s; pass --bundle from a native build.\n' "$platform" "$arch" >&2
 		exit 1
@@ -108,11 +110,12 @@ PY
 else
 	command -v curl >/dev/null || { printf '%s\n' 'curl is required.' >&2; exit 1; }
 	metadata="$stage/release.json"
-	release_api='https://api.github.com/repos/Untrivial-ai/agent-orchestrator/releases/latest'
-	"$nightly" && release_api='https://api.github.com/repos/Untrivial-ai/agent-orchestrator/releases?per_page=100'
+	release_api='https://api.github.com/repos/grzegorzrzeznikiewicz/orchestrator-board/releases/latest'
+	"$nightly" && release_api='https://api.github.com/repos/grzegorzrzeznikiewicz/orchestrator-board/releases?per_page=100'
 	curl -fsSL --retry 3 "$release_api" -o "$metadata"
 	asset_info="$(python3 - "$metadata" "$asset" "$nightly" <<'PY'
 import json, re, sys
+from urllib.parse import urlsplit, unquote
 release = json.load(open(sys.argv[1]))
 if sys.argv[3] == 'true':
     candidates = [r for r in release if r.get('prerelease') and not r.get('draft')
@@ -124,7 +127,11 @@ item = next((a for a in release.get('assets', []) if a['name'] == sys.argv[2]), 
 if not item or not re.fullmatch(r'sha256:[0-9a-f]{64}', item.get('digest') or ''):
     raise SystemExit(f'No verified release asset: {sys.argv[2]}')
 print(f"Downloading AO release: {release['tag_name']}", file=sys.stderr)
-print(item['browser_download_url'])
+url = item.get('browser_download_url', '')
+parsed = urlsplit(url)
+if parsed.scheme != 'https' or parsed.netloc != 'github.com' or not parsed.path.startswith('/grzegorzrzeznikiewicz/orchestrator-board/releases/download/') or parsed.query or parsed.fragment or any(part in ('.', '..') for part in unquote(parsed.path).split('/')):
+    raise SystemExit('Foreign release asset URL refused.')
+print(url)
 print(item['digest'][7:])
 PY
 )"

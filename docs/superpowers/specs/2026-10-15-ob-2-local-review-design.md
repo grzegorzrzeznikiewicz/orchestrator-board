@@ -1,4 +1,6 @@
 # OB 2 Tryb Local review i identyfikacja zmian
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Zrealizowany projekt techniczny. Celem jest spełnienie kryteriów [OB-2](https://gamasoftware.atlassian.net/browse/OB-2) w rozwijanej wersji Agent Orchestrator. Projekt zachowuje istniejący tryb review PR i dodaje lokalny cel review, związany z konkretną zawartością plików.
 

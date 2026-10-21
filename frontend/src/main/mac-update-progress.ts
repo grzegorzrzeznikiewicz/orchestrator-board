@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,7 +26,7 @@ export async function startMacUpdateProgress(options: {
 	appPath: string;
 	version: string;
 }): Promise<{ assertAlive(): void; fail(message: string): Promise<void> }> {
-	const root = path.join(options.stateDir, "update-restart");
+	const root = path.join(options.stateDir, "orchestrator-board-update-restart");
 	await mkdir(root, { recursive: true, mode: 0o700 });
 	const attempt = await mkdtemp(path.join(root, "attempt-"));
 	const request: RestartRequest = {
@@ -99,7 +101,7 @@ export async function acknowledgeMacUpdateRestart(options: {
 	now?: number;
 }): Promise<boolean> {
 	try {
-		const root = path.join(options.stateDir, "update-restart");
+		const root = path.join(options.stateDir, "orchestrator-board-update-restart");
 		const active = JSON.parse(await readFile(path.join(root, "active.json"), "utf8"));
 		if (typeof active.attempt !== "string" || !/^attempt-[a-zA-Z0-9]+$/.test(active.attempt)) return false;
 		const attempt = path.join(root, active.attempt);

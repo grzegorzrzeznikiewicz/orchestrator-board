@@ -1,4 +1,6 @@
 # OB-6 — decyzja użytkownika o lokalnym workflow
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Status: kierunek i niniejsza szczegółowa specyfikacja zatwierdzone przez użytkownika 2026-10-17. To projekt, nie raport wykonania. Implementacji i testów OB-6 jeszcze nie wykonano. Bazowe testy istniejących pakietów `localworkflow`, `localsnapshot` i `browserruntime` przeszły z `-race -count=1`; nie stanowią testów nowej funkcjonalności.
 

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package sessionguard owns the one invariant every write into a live
 // session's pane must satisfy: re-read the session immediately before writing
 // and refuse when the paste could land somewhere only the user may act. The

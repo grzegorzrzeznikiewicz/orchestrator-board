@@ -1,13 +1,17 @@
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
+> Orchestrator Board fork guide adapted from the upstream translation. Illustrations predate this fork. Signed fork releases are not yet published. Use the [canonical README](../README.md) for current installation, source and support. The original Agent Orchestrator attribution and license remain applicable.
+
 <div align="center">
 
-### Orchestrator.inc
+### Orchestrator Board
 
 #### Planifica, ejecuta y supervisa agentes de programación desde un solo lugar.
 
-[![GitHub stars](https://img.shields.io/github/stars/OrchestratorInc/agent-orchestrator?style=flat&logo=github)](https://github.com/OrchestratorInc/agent-orchestrator/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/grzegorzrzeznikiewicz/orchestrator-board?style=flat&logo=github)](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/stargazers)
 ![Top 6k repositories](https://img.shields.io/badge/Top%206k%20repositories-181717?style=flat&logo=github&logoColor=white)
-[![GitHub release](https://img.shields.io/github/v/release/OrchestratorInc/agent-orchestrator?style=flat&logo=github)](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/OrchestratorInc/agent-orchestrator/total?style=flat&logo=github)](https://github.com/OrchestratorInc/agent-orchestrator/releases)
+[![GitHub release](https://img.shields.io/github/v/release/grzegorzrzeznikiewicz/orchestrator-board?style=flat&logo=github)](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/grzegorzrzeznikiewicz/orchestrator-board/total?style=flat&logo=github)](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat)](../LICENSE)
 [![X](https://img.shields.io/badge/@useOrchestrator-555?style=flat&logo=x&logoColor=white)](https://x.com/useOrchestrator)
 [![Discord](https://img.shields.io/badge/Discord-555?style=flat&logo=discord&logoColor=white)](https://discord.com/invite/UZv7JjxbwG)
@@ -16,46 +20,46 @@ Asigna a cada tarea de programación su propio agente, espacio de trabajo y cicl
 Planifica y delega objetivos más amplios con un orquestador que conoce tu proyecto.<br />
 Sigue a cada worker, pull request, ejecución de CI y revisión en un Kanban en vivo.
 
-[**Descargar Orchestrator.inc**](#instalación) &nbsp;&bull;&nbsp; [Documentación](https://docs.orchestrator.inc) &nbsp;&bull;&nbsp; [Versiones](https://github.com/OrchestratorInc/agent-orchestrator/releases) &nbsp;&bull;&nbsp; [Contribuir](../CONTRIBUTING.md) &nbsp;&bull;&nbsp; [Discord](https://discord.com/invite/UZv7JjxbwG)
+[**Descargar Orchestrator Board**](#instalación) &nbsp;&bull;&nbsp; [Documentación](https://docs.orchestrator.inc) &nbsp;&bull;&nbsp; [Versiones](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases) &nbsp;&bull;&nbsp; [Contribuir](../CONTRIBUTING.md) &nbsp;&bull;&nbsp; [Discord](https://discord.com/invite/UZv7JjxbwG)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **Español** · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md)
 
 <br />
 
-<img src="../docs/assets/readme/hero.png" alt="Kanban de Orchestrator.inc con sesiones de workers agrupadas por estado en vivo" width="100%" />
+<img src="../docs/assets/readme/hero.png" alt="Kanban de Orchestrator Board con sesiones de workers agrupadas por estado en vivo" width="100%" />
 </div>
 
 ## Un espacio de trabajo para el desarrollo con agentes
 
 Un agente de programación puede encargarse de una tarea. Cuando varios trabajan en paralelo dentro de un proyecto, el reto cambia: decidir qué importa, dividir bien el trabajo, dar el contexto adecuado a cada agente, evitar colisiones entre ramas y acompañar cada cambio hasta la revisión y la integración.
 
-Orchestrator.inc es un espacio de trabajo local de escritorio creado para ese reto. Añade un repositorio y crea una sesión de worker con el agente, el modelo y la interfaz que mejor se adapten a la tarea. Para trabajo respaldado por Git, Orchestrator.inc asigna al worker su propia rama y su propio worktree. La tarea, la conversación, el terminal, los archivos modificados, la vista previa del navegador, el pull request, la CI y el estado de revisión permanecen vinculados a esa sesión de principio a fin.
+Orchestrator Board es un espacio de trabajo local de escritorio creado para ese reto. Añade un repositorio y crea una sesión de worker con el agente, el modelo y la interfaz que mejor se adapten a la tarea. Para trabajo respaldado por Git, Orchestrator Board asigna al worker su propia rama y su propio worktree. La tarea, la conversación, el terminal, los archivos modificados, la vista previa del navegador, el pull request, la CI y el estado de revisión permanecen vinculados a esa sesión de principio a fin.
 
-Detrás de la aplicación de escritorio, el daemon local de Orchestrator.inc observa la actividad de los agentes y el estado del control de versiones. El resultado es una vista compartida y en vivo del proyecto, en lugar de una colección de terminales, ramas y pestañas del navegador desconectadas.
+Detrás de la aplicación de escritorio, el daemon local de Orchestrator Board observa la actividad de los agentes y el estado del control de versiones. El resultado es una vista compartida y en vivo del proyecto, en lugar de una colección de terminales, ramas y pestañas del navegador desconectadas.
 
-<img src="../docs/assets/readme/tui.png" alt="Orchestrator.inc workspace with a supervised native agent interface" width="100%" />
+<img src="../docs/assets/readme/tui.png" alt="Orchestrator Board workspace with a supervised native agent interface" width="100%" />
 
 ## Los workers ejecutan tareas bien definidas
 
-Un worker es la unidad de ejecución de Orchestrator.inc: una tarea, un agente de programación y un espacio de trabajo aislado. Usa **New task** cuando el trabajo ya esté claro. Describe el resultado, elige un agente y un modelo, adjunta los archivos pertinentes y trabaja con el agente desde el Chat estructurado o desde su interfaz de terminal nativa.
+Un worker es la unidad de ejecución de Orchestrator Board: una tarea, un agente de programación y un espacio de trabajo aislado. Usa **New task** cuando el trabajo ya esté claro. Describe el resultado, elige un agente y un modelo, adjunta los archivos pertinentes y trabaja con el agente desde el Chat estructurado o desde su interfaz de terminal nativa.
 
 Puedes abrir un worker en cualquier momento para continuar la conversación, conectarte a su terminal, inspeccionar sus cambios, usar su navegador aislado, revisar su pull request o devolver feedback de CI y revisión al mismo agente. Así, cada tarea se entiende por sí sola y el trabajo en paralelo no termina mezclado en un único contexto compartido.
 
-<img src="../docs/assets/readme/new-task.png" alt="Creating a focused worker task in Orchestrator.inc" width="100%" />
+<img src="../docs/assets/readme/new-task.png" alt="Creating a focused worker task in Orchestrator Board" width="100%" />
 
 ## El orquestador planifica a escala de proyecto
 
-El orquestador del proyecto es el agente permanente de planificación y coordinación de Orchestrator.inc. Trabaja un nivel por encima de las tareas individuales: la dirección del producto, la estrategia técnica, las prioridades y la secuencia de trabajo en todo el repositorio.
+El orquestador del proyecto es el agente permanente de planificación y coordinación de Orchestrator Board. Trabaja un nivel por encima de las tareas individuales: la dirección del producto, la estrategia técnica, las prioridades y la secuencia de trabajo en todo el repositorio.
 
-Usa el orquestador para explorar una idea antes de implementarla, desarrollar enfoques de producto y técnicos, sopesar ventajas, costes y compromisos, detectar trabajo de alto impacto y convertir un objetivo ambiguo en un plan concreto. Su conversación, ligada al proyecto, conserva objetivos, decisiones, restricciones y razonamientos anteriores. Combina ese historial de planificación con el contexto del repositorio y el estado actual de Orchestrator.inc, incluidos los workers activos, sus responsables, los pull requests, la CI y las revisiones. De este modo, la planificación se mantiene anclada tanto en el proyecto como en el trabajo que ya está en marcha.
+Usa el orquestador para explorar una idea antes de implementarla, desarrollar enfoques de producto y técnicos, sopesar ventajas, costes y compromisos, detectar trabajo de alto impacto y convertir un objetivo ambiguo en un plan concreto. Su conversación, ligada al proyecto, conserva objetivos, decisiones, restricciones y razonamientos anteriores. Combina ese historial de planificación con el contexto del repositorio y el estado actual de Orchestrator Board, incluidos los workers activos, sus responsables, los pull requests, la CI y las revisiones. De este modo, la planificación se mantiene anclada tanto en el proyecto como en el trabajo que ya está en marcha.
 
 Cuando un plan está listo para ejecutarse, el orquestador puede dividirlo en tareas bien definidas, iniciar o redirigir workers, entregar a cada uno el contexto pertinente, seguir su progreso y coordinar el trabajo posterior. El orquestador se ocupa de la planificación y la delegación. Los workers se ocupan de la implementación, las pruebas, los commits y los pull requests.
 
-<img src="../docs/assets/readme/orchestrator.png" alt="Orchestrator.inc coordinating multiple workers with project context" width="100%" />
+<img src="../docs/assets/readme/orchestrator.png" alt="Orchestrator Board coordinating multiple workers with project context" width="100%" />
 
 ## El Kanban hace que el sistema sea comprensible
 
-Cada worker aparece en el mismo tablero en vivo, tanto si lo iniciaste desde **New task** como si lo delegó el orquestador. Orchestrator.inc determina la posición de cada tarjeta a partir de datos de la sesión, el pull request, la CI y la revisión. Así, el Kanban se convierte en una vista operativa del proyecto:
+Cada worker aparece en el mismo tablero en vivo, tanto si lo iniciaste desde **New task** como si lo delegó el orquestador. Orchestrator Board determina la posición de cada tarjeta a partir de datos de la sesión, el pull request, la CI y la revisión. Así, el Kanban se convierte en una vista operativa del proyecto:
 
 - **Working:** workers que están implementando activamente o listos para recibir otra instrucción
 - **Needs you:** sesiones bloqueadas, datos pendientes, CI fallida, cambios solicitados o señales perdidas
@@ -64,17 +68,17 @@ Cada worker aparece en el mismo tablero en vivo, tanto si lo iniciaste desde **N
 
 Cada tarjeta reúne la tarea, el agente, la rama, la actividad, el pull request y el estado. Ábrela para inspeccionar la conversación o el terminal, los archivos modificados, el resumen del PR, las revisiones y la vista previa. El tablero muestra qué avanza, qué está bloqueado y dónde tendrá más impacto tu atención.
 
-<img src="../docs/assets/readme/hero.png" alt="Orchestrator.inc Kanban showing workers grouped by live status" width="100%" />
+<img src="../docs/assets/readme/hero.png" alt="Orchestrator Board Kanban showing workers grouped by live status" width="100%" />
 
 ## Un solo flujo de trabajo, de la idea a la integración
 
 1. **Empieza en el nivel adecuado.** Entrega una tarea clara directamente a un worker o desarrolla un objetivo mayor con el orquestador del proyecto y deja que dé forma al plan.
 2. **Delega trabajo concreto.** Inicia los workers tú mismo o deja que el orquestador los cree con el contexto y la responsabilidad que necesitan.
-3. **Trabaja de forma aislada.** Cada worker respaldado por Git recibe su propia rama y su propio worktree. Los workers Scratch reciben directorios sin rama gestionados por Orchestrator.inc.
-4. **Supervisa el estado en vivo.** Orchestrator.inc sigue la actividad de los agentes, los pull requests, la CI, el feedback de revisión y los conflictos de integración, y refleja esos datos en el Kanban.
+3. **Trabaja de forma aislada.** Cada worker respaldado por Git recibe su propia rama y su propio worktree. Los workers Scratch reciben directorios sin rama gestionados por Orchestrator Board.
+4. **Supervisa el estado en vivo.** Orchestrator Board sigue la actividad de los agentes, los pull requests, la CI, el feedback de revisión y los conflictos de integración, y refleja esos datos en el Kanban.
 5. **Cierra el ciclo de feedback.** Inspecciona cualquier worker directamente, toma decisiones de proyecto con el orquestador y devuelve los fallos accionables o comentarios de revisión al agente responsable.
 
-Orchestrator.inc funciona con los agentes de programación y el flujo de control de versiones que ya utilizas. Los agentes mantienen sus fortalezas propias. Orchestrator.inc aporta el contexto del proyecto, la ejecución aislada, la coordinación y la vista operativa que les permiten funcionar como un sistema.
+Orchestrator Board funciona con los agentes de programación y el flujo de control de versiones que ya utilizas. Los agentes mantienen sus fortalezas propias. Orchestrator Board aporta el contexto del proyecto, la ejecución aislada, la coordinación y la vista operativa que les permiten funcionar como un sistema.
 
 ## Funciones destacadas
 
@@ -85,7 +89,7 @@ Orchestrator.inc funciona con los agentes de programación y el flujo de control
       <p>Mantén junto al worker la CI, la capacidad de integración, el estado de los revisores y las revisiones interactivas con agentes. Después, devuelve los cambios solicitados al mismo responsable.</p>
     </td>
     <td width="64%">
-      <img src="../docs/assets/readme/review.png" alt="Sesión de worker con pull request, CI y estado de revisión con agentes en Orchestrator.inc" width="100%" />
+      <img src="../docs/assets/readme/review.png" alt="Sesión de worker con pull request, CI y estado de revisión con agentes en Orchestrator Board" width="100%" />
     </td>
   </tr>
   <tr>
@@ -100,10 +104,10 @@ Orchestrator.inc funciona con los agentes de programación y el flujo de control
   <tr>
     <td width="36%" valign="middle">
       <h3>Interfaces nativas, un solo supervisor</h3>
-      <p>Usa Chat estructurado o la interfaz de terminal nativa del agente mientras Orchestrator.inc mantiene el contexto, el estado del workspace y el feedback en un solo lugar.</p>
+      <p>Usa Chat estructurado o la interfaz de terminal nativa del agente mientras Orchestrator Board mantiene el contexto, el estado del workspace y el feedback en un solo lugar.</p>
     </td>
     <td width="64%">
-      <img src="../docs/assets/readme/tui.png" alt="Agent terminal interface supervised inside Orchestrator.inc" width="100%" />
+      <img src="../docs/assets/readme/tui.png" alt="Agent terminal interface supervised inside Orchestrator Board" width="100%" />
     </td>
   </tr>
 </table>
@@ -176,24 +180,24 @@ Los agentes de programación trabajan en un mismo flujo supervisado. Consulta el
 
 ## Instalación
 
-Descarga la última aplicación de escritorio de Orchestrator.inc para tu plataforma. Orchestrator.inc comprueba automáticamente si hay actualizaciones.
+Descarga la última aplicación de escritorio de Orchestrator Board para tu plataforma. Orchestrator Board comprueba automáticamente si hay actualizaciones.
 
 | Plataforma            | Descarga                                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| macOS (Apple silicon) | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-darwin-arm64.dmg)   |
-| macOS (Intel)         | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-darwin-x64.dmg)     |
-| Windows               | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-win32-x64.exe)      |
-| Linux (AppImage)      | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-linux-x64.AppImage) |
-| Linux (Debian/Ubuntu) | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-linux-x64.deb)      |
-| Linux (Fedora/RHEL)   | [Descargar](https://github.com/OrchestratorInc/agent-orchestrator/releases/latest/download/agent-orchestrator-linux-x64.rpm)      |
+| macOS (Apple silicon) | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)   |
+| macOS (Intel)         | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)     |
+| Windows               | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)      |
+| Linux (AppImage)      | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases) |
+| Linux (Debian/Ubuntu) | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)      |
+| Linux (Fedora/RHEL)   | [Descargar](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases)      |
 
-Abre Orchestrator.inc y selecciona el repositorio que quieres que Orchestrator.inc gestione. La aplicación de escritorio ejecuta el daemon por ti, así que no necesitas ninguna CLI. Consulta la [guía de instalación](https://docs.orchestrator.inc/installation) para configurar las CLI de los agentes y resolver problemas.
+Abre Orchestrator Board y selecciona el repositorio que quieres que Orchestrator Board gestione. La aplicación de escritorio ejecuta el daemon por ti, así que no necesitas ninguna CLI. Consulta la [guía de instalación](https://docs.orchestrator.inc/installation) para configurar las CLI de los agentes y resolver problemas.
 
 ## Informar de un bug
 
-[Abre un informe de bug](https://github.com/OrchestratorInc/agent-orchestrator/issues/new?template=bug_report.yml) desde tu propia cuenta de GitHub. Bastan unas frases, escritas con tus propias palabras, sobre lo que hiciste y lo que salió mal. Si los tienes, añade lo que esperabas, los pasos para reproducirlo, tu versión de Orchestrator.inc y tu sistema operativo, o una captura de pantalla. Estos datos ayudan, pero no son requisitos.
+[Abre un informe de bug](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues/new?template=bug_report.yml) desde tu propia cuenta de GitHub. Bastan unas frases, escritas con tus propias palabras, sobre lo que hiciste y lo que salió mal. Si los tienes, añade lo que esperabas, los pasos para reproducirlo, tu versión de Orchestrator Board y tu sistema operativo, o una captura de pantalla. Estos datos ayudan, pero no son requisitos.
 
-Un agente de programación local puede ayudarte a precisar el informe y recopilar pruebas con la [skill de triaje de bugs](https://github.com/OrchestratorInc/agent-orchestrator/blob/main/.agents/skills/bug-triage/SKILL.md). Mantén el contenido del issue centrado en tus observaciones. Coloca los registros, extractos de la base de datos y notas de investigación recopilados por el agente en archivos adjuntos claramente identificados. Revisa el borrador antes de enviarlo desde tu propia cuenta. No pidas a un bot que presente issues en tu nombre; la atribución del informe es importante.
+Un agente de programación local puede ayudarte a precisar el informe y recopilar pruebas con la [skill de triaje de bugs](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/blob/main/.agents/skills/bug-triage/SKILL.md). Mantén el contenido del issue centrado en tus observaciones. Coloca los registros, extractos de la base de datos y notas de investigación recopilados por el agente en archivos adjuntos claramente identificados. Revisa el borrador antes de enviarlo desde tu propia cuenta. No pidas a un bot que presente issues en tu nombre; la atribución del informe es importante.
 
 Si necesitas ayuda para describir un problema, únete al [canal de triaje de bugs en Discord](https://discord.com/channels/1476302178913357958/1491735678156013588). Consulta la [guía para contribuir](../CONTRIBUTING.md#bugs-and-features) para obtener más detalles.
 
@@ -202,11 +206,11 @@ Si necesitas ayuda para describir un problema, únete al [canal de triaje de bug
 Las contribuciones son bienvenidas en código, documentación, triaje, ejemplos y pruebas.
 
 ```bash
-git clone https://github.com/OrchestratorInc/agent-orchestrator.git
+git clone https://github.com/grzegorzrzeznikiewicz/orchestrator-board.git
 cd agent-orchestrator
 ```
 
-Empieza por la [guía de desarrollo](../docs/development.md), donde encontrarás los requisitos previos, la configuración local y los comandos de prueba. Lee [CONTRIBUTING.md](../CONTRIBUTING.md) antes de abrir un pull request y utiliza [GitHub Issues](https://github.com/OrchestratorInc/agent-orchestrator/issues) para informar de bugs o proponer funciones.
+Empieza por la [guía de desarrollo](../docs/development.md), donde encontrarás los requisitos previos, la configuración local y los comandos de prueba. Lee [CONTRIBUTING.md](../CONTRIBUTING.md) antes de abrir un pull request y utiliza [GitHub Issues](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues) para informar de bugs o proponer funciones.
 
 ## Documentación
 
@@ -221,12 +225,12 @@ Empieza por la [guía de desarrollo](../docs/development.md), donde encontrarás
 
 ## Comunidad
 
-Únete a [Discord](https://discord.com/invite/UZv7JjxbwG) para pedir ayuda y hablar con otros colaboradores, sigue a [@useOrchestrator](https://x.com/useOrchestrator) para conocer las novedades o inicia una conversación en [GitHub Issues](https://github.com/OrchestratorInc/agent-orchestrator/issues).
+Únete a [Discord](https://discord.com/invite/UZv7JjxbwG) para pedir ayuda y hablar con otros colaboradores, sigue a [@useOrchestrator](https://x.com/useOrchestrator) para conocer las novedades o inicia una conversación en [GitHub Issues](https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues).
 
 ## Telemetría del producto
 
-Orchestrator.inc recopila métricas de uso y fiabilidad sin contenido de los proyectos. El propietario de un proyecto en GitHub y el nombre de usuario conectado pueden identificar a una persona; la telemetría no es anónima. Desactivarla también detiene el envío de esos datos. [Detalles y controles](../docs/telemetry.md).
+Orchestrator Board recopila métricas de uso y fiabilidad sin contenido de los proyectos. El propietario de un proyecto en GitHub y el nombre de usuario conectado pueden identificar a una persona; la telemetría no es anónima. Desactivarla también detiene el envío de esos datos. [Detalles y controles](../docs/telemetry.md).
 
 ## Licencia
 
-Orchestrator.inc está disponible bajo la [licencia Apache 2.0](../LICENSE).
+Orchestrator Board está disponible bajo la [licencia Apache 2.0](../LICENSE).

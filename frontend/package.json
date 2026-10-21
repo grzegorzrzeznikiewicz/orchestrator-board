@@ -1,16 +1,16 @@
 {
-	"name": "agent-orchestrator",
-	"productName": "Agent Orchestrator",
+	"name": "orchestrator-board",
+	"productName": "Orchestrator Board",
 	"version": "0.13.0",
 	"private": true,
-	"description": "Electron + TypeScript frontend for the agent-orchestrator rewrite",
-	"author": "Agent Orchestrator",
-	"license": "MIT",
-	"homepage": "https://github.com/aoagents/agent-orchestrator",
+	"description": "Gama Software desktop board for supervising coding agents, based on Agent Orchestrator",
+	"author": "Gama Software; upstream Agent Orchestrator contributors",
+	"license": "Apache-2.0",
+	"homepage": "https://github.com/grzegorzrzeznikiewicz/orchestrator-board",
 	"main": ".vite/build/main.js",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/aoagents/agent-orchestrator"
+		"url": "https://github.com/grzegorzrzeznikiewicz/orchestrator-board"
 	},
 	"scripts": {
 		"lint": "eslint . --max-warnings 0",
@@ -24,18 +24,19 @@
 		"dev": "electron-forge start",
 		"dev:web": "node ./scripts/dev-web.mjs",
 		"build": "npm run package",
-		"prepackage": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime",
+		"prepackage": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime && npm run licenses:generate",
 		"package": "electron-forge package",
-		"premake": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime",
+		"premake": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime && npm run licenses:generate",
 		"make": "electron-forge make",
-		"publish": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime && electron-forge publish",
+		"publish": "npm run build:daemon && npm run build:tmux && npm run browser-runtime:prepare && npm run build:acp-runtime && npm run licenses:generate && electron-forge publish",
 		"typecheck": "tsc --noEmit",
 		"typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
 		"test": "vitest run --config vite.renderer.config.ts",
 		"test:browser-postcondition-integration": "node ./scripts/run-browser-postcondition-integration.mjs",
 		"test:e2e": "playwright test",
 		"test:e2e:renderer": "playwright test --grep \"@T0|@P0\"",
-		"api:ts": "openapi-typescript ../backend/internal/httpd/apispec/openapi.yaml -o src/api/schema.ts"
+		"api:ts": "openapi-typescript ../backend/internal/httpd/apispec/openapi.yaml -o src/api/schema.ts",
+		"licenses:generate": "node ./scripts/generate-license-resources.mjs"
 	},
 	"devDependencies": {
 		"@electron-forge/cli": "^7.8.0",

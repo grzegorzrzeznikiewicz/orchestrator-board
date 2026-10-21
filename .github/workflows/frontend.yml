@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 name: Frontend
 
 # Runs the renderer vitest suite and typechecks the codebase.

@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../shared/product";
 import { createWorkOS, type User } from "@workos-inc/node";
 import { app, dialog, ipcMain, safeStorage, shell } from "electron";
 import { createHash } from "node:crypto";
@@ -53,29 +56,15 @@ function isLoopbackRedirect(redirectUri: string): boolean {
   }
 }
 
-// The packaged app returns from WorkOS via an HTTPS bounce page on our own domain
-// (served by the control plane at /app/auth/return), which re-emits the result to
-// the ao-app:// deep link the installed app handles. Routing through that page —
-// rather than setting ao-app:// as the WorkOS redirect_uri directly — matters for
-// two reasons: the browser lands on a real HTTPS page instead of hanging forever
-// on an unloadable custom-scheme navigation (no stuck "loading" tab), and the OS
-// "open Agent Orchestrator?" prompt is attributed to our own domain (aoagents.dev)
-// instead of the opaque WorkOS AuthKit subdomain.
-//
-// A development build can't use the ao-app:// deep link (macOS routes it to the
-// installed app, not the unpackaged Electron binary), so it falls back to a
-// loopback callback server — the standard desktop-OAuth pattern — for zero-setup
-// sign-in. AO_CLOUD_AUTH_REDIRECT overrides either default (e.g. to point a
-// packaged build at a staging bounce page).
-const DEFAULT_PACKAGED_REDIRECT_URI = "https://api.aoagents.dev/app/auth/return";
-const REDIRECT_URI =
-  process.env.AO_CLOUD_AUTH_REDIRECT?.trim() ||
-  (app.isPackaged
-    ? DEFAULT_PACKAGED_REDIRECT_URI
-    : "http://127.0.0.1:3000/callback");
+// The upstream HTTPS bounce emits ao-app:// and belongs to the original app.
+// Use the existing loopback flow for this fork. An explicit redirect override
+// requires a WorkOS allowlisted callback and, for HTTPS, a fork-aware bounce.
+const REDIRECT_URI = process.env.AO_CLOUD_AUTH_REDIRECT?.trim() || "http://127.0.0.1:3000/callback";
 const useLoopbackRedirect = isLoopbackRedirect(REDIRECT_URI);
-const AUTH_STORE_FILE = "cloud-auth.bin";
-const LEGACY_SESSION_FILE = "cloud-session.json";
+// The fork has its own OS encryption identity; never decrypt, rotate or delete
+// original application credentials in the shared daemon data directory.
+const AUTH_STORE_FILE = "orchestrator-board-cloud-auth.bin";
+const LEGACY_SESSION_FILE = "orchestrator-board-cloud-session.json";
 const PKCE_TTL_MS = 10 * 60 * 1000;
 const workos = CLIENT_ID ? createWorkOS({ clientId: CLIENT_ID }) : null;
 
@@ -453,7 +442,7 @@ export async function beginCloudSignIn(dataDir: string): Promise<void> {
     },
   });
   if (useLoopbackRedirect) {
-    startLoopbackCallbackServer(dataDir);
+    await startLoopbackCallbackServer(dataDir);
   }
   await shell.openExternal(url);
 }
@@ -516,7 +505,7 @@ export async function handleCloudDeepLink(
 ): Promise<CloudAccount | null> {
   if (!workos) throw new Error("WorkOS is not configured.");
   const url = new URL(rawURL);
-  if (url.protocol !== "ao-app:" || url.hostname !== "callback") return null;
+  if (url.protocol !== `${PRODUCT.authProtocol}:` || url.hostname !== "callback") return null;
   const error = url.searchParams.get("error");
   if (error) {
     throw new Error(
@@ -543,10 +532,10 @@ function closeLoopbackServer(): void {
 }
 
 // startLoopbackCallbackServer arms a one-shot local HTTP server that receives
-// the WorkOS redirect for a development build, exchanges the code, and hands the
+// the WorkOS redirect for the fork, exchanges the code, and hands the
 // session to the renderer. It closes itself after the first callback or the PKCE
 // window, whichever comes first.
-function startLoopbackCallbackServer(dataDir: string): void {
+async function startLoopbackCallbackServer(dataDir: string): Promise<void> {
   const redirect = new URL(REDIRECT_URI);
   closeLoopbackServer();
   const server = createServer((req, res) => {
@@ -575,7 +564,7 @@ function startLoopbackCallbackServer(dataDir: string): void {
         res.end(
           CALLBACK_HTML(
             "Signed in to AO Cloud",
-            "You can close this tab and return to Agent Orchestrator.",
+            `You can close this tab and return to ${PRODUCT.productName}.`,
           ),
         );
       } catch (callbackError) {
@@ -584,7 +573,7 @@ function startLoopbackCallbackServer(dataDir: string): void {
         res.end(
           CALLBACK_HTML(
             "Sign-in failed",
-            "Return to Agent Orchestrator and try signing in again.",
+            `Return to ${PRODUCT.productName} and try signing in again.`,
           ),
         );
       } finally {
@@ -592,12 +581,15 @@ function startLoopbackCallbackServer(dataDir: string): void {
       }
     })();
   });
-  server.on("error", (error) => {
-    console.error("WorkOS loopback callback server error:", error);
-    closeLoopbackServer();
-  });
-  server.listen(Number(redirect.port) || 80, redirect.hostname);
   loopbackServer = server;
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      closeLoopbackServer();
+      reject(new Error(`Could not start the sign-in callback on ${redirect.host}: ${error.code ?? error.message}. Close the conflicting app or configure AO_CLOUD_AUTH_REDIRECT with an allowed loopback port.`));
+    });
+    server.listen(Number(redirect.port) || 80, redirect.hostname);
+  });
   const timer = setTimeout(closeLoopbackServer, PKCE_TTL_MS);
   timer.unref?.();
 }
@@ -623,9 +615,9 @@ function signInFailureDetail(error: unknown): string {
     return "The WorkOS response could not be verified. Start sign-in again to continue.";
   }
   if (message.includes("network") || message.includes("fetch")) {
-    return "Agent Orchestrator could not reach WorkOS. Check your connection and try again.";
+    return `${PRODUCT.productName} could not reach WorkOS. Check your connection and try again.`;
   }
-  return "Agent Orchestrator could not complete WorkOS sign-in. Please try again.";
+  return `${PRODUCT.productName} could not complete WorkOS sign-in. Please try again.`;
 }
 
 export async function showCloudSignInFailure(error: unknown): Promise<void> {
@@ -639,12 +631,12 @@ export async function showCloudSignInFailure(error: unknown): Promise<void> {
 
 export function registerCloudProtocol(): void {
   if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("ao-app", process.execPath, [
+    app.setAsDefaultProtocolClient(PRODUCT.authProtocol, process.execPath, [
       path.resolve(process.argv[1]),
     ]);
     return;
   }
-  app.setAsDefaultProtocolClient("ao-app");
+  app.setAsDefaultProtocolClient(PRODUCT.authProtocol);
 }
 
 export function installCloudIPC(
@@ -660,7 +652,7 @@ export function installCloudIPC(
         title: "WorkOS not configured",
         message: "WorkOS sign-in is not configured.",
         detail:
-          "Set VITE_WORKOS_CLIENT_ID and restart Agent Orchestrator to enable sign-in.",
+          `Set VITE_WORKOS_CLIENT_ID and restart ${PRODUCT.productName} to enable sign-in.`,
       });
       return;
     }

@@ -2088,7 +2088,7 @@ describe("Sidebar", () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				"If this folder needs Git setup, AO will initialize it and create the first commit before starting.",
+				"If this folder needs Git setup, Orchestrator Board will initialize it and create the first commit before starting.",
 			),
 		).toBeInTheDocument();
 		await chooseOption(screen.getByRole("combobox", { name: "Orchestrator agent" }), "Claude Code");
@@ -2272,7 +2272,7 @@ describe("Sidebar", () => {
 		await user.click(await screen.findByRole("menuitem", { name: "Remove project" }));
 
 		expect(await screen.findByRole("dialog", { name: "Remove project" })).toHaveTextContent(
-			"2 open pull requests belong to this project. Removing it will hide those pull requests from AO, but will not close them.",
+			"2 open pull requests belong to this project. Removing it will hide those pull requests from Orchestrator Board, but will not close them.",
 		);
 	});
 

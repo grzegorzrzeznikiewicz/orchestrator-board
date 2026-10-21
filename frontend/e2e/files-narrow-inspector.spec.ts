@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { expect, test, type Page } from "@playwright/test";
 import { installFakeBridge } from "./support/fake-bridge";
 import { openInspector } from "./support/open-inspector";
@@ -87,6 +89,9 @@ async function expectNarrowLayout(page: Page) {
 }
 
 test("@P0 files filter and review rows stay clear of each other in a narrow inspector", async ({ page }) => {
+	// Establish the wide case explicitly: the default 1280px viewport correctly
+	// clamps this rail below 440px to preserve the minimum readable chat width.
+	await page.setViewportSize({ width: 1800, height: 900 });
 	await stubWorkspaceFiles(page);
 	await page.goto(`/#/projects/ao-demo/sessions/${sessionId}`);
 	const inspector = await openInspector(page);

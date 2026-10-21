@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -654,7 +656,7 @@ describe("HarnessSettingsSection", () => {
 		await waitFor(() => expect(window.ao!.clipboard.writeText).toHaveBeenCalled());
 		const report = vi.mocked(window.ao!.clipboard.writeText).mock.calls.at(-1)![0];
 		expect(report).toContain("Source: keychain");
-		expect(report).toContain("Checks use AO's process environment on the selected host.");
+		expect(report).toContain("Checks use Orchestrator Board's process environment on the selected host.");
 		expect(within(page).queryByText(/An inconclusive check does not mean you are signed out/)).toBeNull();
 		expect(report).toContain("Auth check: provider_validation (token_renewal_pending)");
 		expect(report).not.toContain("Next step:");

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -164,7 +166,7 @@ describe("local-auth register/login/logout", () => {
 		await expect(getCloudAccessToken(dataDir)).resolves.toBe("ao_local_login_token");
 
 		// A stored token is encrypted on disk (safeStorage passthrough here).
-		await expect(readFile(path.join(dataDir, "cloud-auth.bin"))).resolves.toBeInstanceOf(Buffer);
+		await expect(readFile(path.join(dataDir, "orchestrator-board-cloud-auth.bin"))).resolves.toBeInstanceOf(Buffer);
 	});
 
 	it("surfaces the control plane error message on a failed login", async () => {

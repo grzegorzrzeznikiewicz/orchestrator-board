@@ -1,4 +1,6 @@
 # OB-3 — lokalne review Claude i trwały wynik
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Zadanie: [OB-3](https://gamasoftware.atlassian.net/browse/OB-3). Data: 2026-10-16. Gałąź: `feature/OB-3`, utworzona z `origin/main` po scaleniu OB-2. Implementację i próby wykonano bez commitów i push, w głównym katalogu projektu. Po odbiorze użytkownik osobno autoryzował publikację zmian.
 

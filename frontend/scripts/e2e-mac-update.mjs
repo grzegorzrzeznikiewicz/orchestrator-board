@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // End-to-end macOS auto-update harness (#3288 workstream 0).
 //
 // Does what a real user does: takes an already-installed version N-1 bundle,
@@ -34,7 +36,7 @@
 //     would make the harness depend on the runner image's macOS version.
 //
 // usage:
-//   node scripts/e2e-mac-update.mjs --app "/Applications/Agent Orchestrator.app" \
+//   node scripts/e2e-mac-update.mjs --app "/Applications/Orchestrator Board.app" \
 //     --expect-version 0.10.4 [--state-dir ~/.ao] [--channel latest|nightly]
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -350,7 +352,7 @@ async function run(opts) {
 }
 
 // readExecutableName pulls CFBundleExecutable out of the bundle instead of
-// hardcoding "agent-orchestrator", so a rename of packagerConfig.executableName
+// hardcoding "orchestrator-board", so a rename of packagerConfig.executableName
 // does not silently break the harness.
 function readExecutableName(appPath) {
 	const plist = join(appPath, "Contents", "Info.plist");

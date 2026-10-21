@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../../shared/product";
 import { useTranslation } from "react-i18next";
 import { AOMascot } from "./AOMascot";
 import { useSystemRequirementsGate } from "../hooks/useSystemRequirementsGate";
@@ -14,7 +17,7 @@ export function DaemonStartupLoader() {
 	return (
 		<div
 			aria-busy="true"
-			aria-label={t("startup.aria", { brand: "Agent Orchestrator" })}
+			aria-label={t("startup.aria", { brand: PRODUCT.productName })}
 			className="ao-startup-screen flex h-full w-full items-center justify-center bg-background text-foreground"
 			data-testid="daemon-startup-loader"
 			role="status"

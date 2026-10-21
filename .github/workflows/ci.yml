@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 name: CI
 
 # Keep this workflow unfiltered: docs-only PRs also need a terminal status.

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package review holds the core code-review logic: triggering a reviewer over a
 // worker's worktree, recording review runs, and accepting submitted results.
 //

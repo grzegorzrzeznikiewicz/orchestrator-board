@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { describe, expect, it } from "vitest";
 import { APP_LOCALES, coerceLocale, DEFAULT_LOCALE } from "./locales";
 import { createAppI18n as createBaseAppI18n, createLazyAppI18n, loadLocaleCatalog, type TranslationCatalogs } from "./instance";
@@ -146,7 +148,7 @@ describe("app i18next instance", () => {
 		expect(chinese.t("inspector.open")).toBe("打开");
 		expect(chinese.t("inspector.openTerminal")).toBe("打开终端");
 		expect(chinese.t("createProject.gitSetupNotice")).toBe(
-			"如果此文件夹需要设置 Git，AO 会先初始化仓库并创建首次提交，然后再启动。",
+			"如果此文件夹需要设置 Git，Orchestrator Board 会先初始化仓库并创建首次提交，然后再启动。",
 		);
 		expect(chinese.t("settings.updates.currentVersion", { version: "v1.2.3" })).toBe("当前版本 - v1.2.3");
 		expect(chinese.t("settings.updates.updateTo", { version: "v1.2.3" })).toBe("更新至 v1.2.3");

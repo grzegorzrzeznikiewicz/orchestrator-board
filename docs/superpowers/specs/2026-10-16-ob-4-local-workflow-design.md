@@ -1,4 +1,6 @@
 # OB-4 — automatyczna pętla lokalnego wykonania, testów i review
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Status: specyfikacja zatwierdzona przez użytkownika 2026-10-16. Plan implementacji również zatwierdzony; użytkownik wybrał wykonanie natywne.
 

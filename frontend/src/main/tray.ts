@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../shared/product";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
@@ -81,7 +84,7 @@ export function createTrayController(options: TrayControllerOptions): TrayContro
 	const render = () => {
 		const count = sessions.length;
 		tray.setTitle(count > 0 ? String(count) : "");
-		tray.setToolTip(count > 0 ? tPlural("tray.attentionTooltip", count) : "Agent Orchestrator");
+		tray.setToolTip(count > 0 ? tPlural("tray.attentionTooltip", count) : PRODUCT.productName);
 
 		const items: MenuItemConstructorOptions[] = [];
 		if (count === 0) {

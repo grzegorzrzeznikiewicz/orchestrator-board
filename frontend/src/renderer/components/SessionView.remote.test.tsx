@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -172,7 +174,7 @@ it("hides stale chat controls when the upstream daemon fails but its proxy remai
 
 it.each([
 	[401, { error: "unauthorized", code: "BAD_PASSWORD" }, "Host rejected the password"],
-	[426, { error: "incompatible", code: "HOST_API_INCOMPATIBLE" }, "AO versions are incompatible"],
+	[426, { error: "incompatible", code: "HOST_API_INCOMPATIBLE" }, "Orchestrator Board versions are incompatible"],
 	[502, { error: "unavailable", code: "HOST_IDENTITY_UNVERIFIED", message: "Host identity changed" }, "Host is offline"],
 ])("explains remote session HTTP %i failures while its proxy is still connected", async (status, body, message) => {
 	remoteConnect.mockResolvedValue({ hostId: "box-a", label: "Box A", url: "http://box-a:3001", base: "http://127.0.0.1:4000" });

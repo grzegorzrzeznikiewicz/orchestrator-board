@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "./product";
 // Developer Mode only. Links the global ao command to the CLI shipped inside the
 // installed app. It never edits shell startup files and never replaces a
 // command AO did not create.
@@ -105,7 +108,7 @@ export function cliLinkSupport(input: {
 		return {
 			ok: false,
 			message:
-				"Windows is not supported. Agent Orchestrator does not add ao to PATH, and this action will not create an elevated symlink or edit shell configuration.",
+				`Windows is not supported. ${PRODUCT.productName} does not add ao to PATH, and this action will not create an elevated symlink or edit shell configuration.`,
 		};
 	}
 	if (input.appImage) {
@@ -116,12 +119,12 @@ export function cliLinkSupport(input: {
 		};
 	}
 	if (input.platform === "darwin" && (input.appCliPath?.includes("/AppTranslocation/") || input.appCliPath?.startsWith("/Volumes/"))) {
-		return { ok: false, message: "Move Agent Orchestrator to Applications before linking the global ao command." };
+		return { ok: false, message: `Move ${PRODUCT.productName} to Applications before linking the global ao command.` };
 	}
 	if (!input.isPackaged) {
 		return {
 			ok: false,
-			message: "This checkout is not an installed app. Link the global ao command from the installed Agent Orchestrator app.",
+			message: `This checkout is not an installed app. Link the global ao command from the installed ${PRODUCT.productName} app.`,
 		};
 	}
 	if (input.platform !== "darwin" && input.platform !== "linux") {
@@ -245,7 +248,7 @@ export async function inspectCliLink(io: CliLinkIo, request: CliLinkRequest): Pr
 		}
 	}
 	if (current.kind === "foreign") {
-		message = `The command at ${gated.linkPath} is not an Agent Orchestrator link. It was left unchanged.`;
+		message = `The command at ${gated.linkPath} is not an ${PRODUCT.productName} link. It was left unchanged.`;
 	}
 	if (current.kind === "missing" && !(await io.canWrite(io.parent(gated.linkPath)))) {
 		message = await io.lstat(io.parent(gated.linkPath))
@@ -276,7 +279,7 @@ export async function linkCli(io: CliLinkIo, request: CliLinkRequest): Promise<C
 	if (!view.ok) return view;
 	const { status } = view;
 	if (status.current.kind === "foreign") {
-		return failure("foreign", `The command at ${status.linkPath} is not an Agent Orchestrator link. It was left unchanged.`, {
+		return failure("foreign", `The command at ${status.linkPath} is not an ${PRODUCT.productName} link. It was left unchanged.`, {
 			linkPath: status.linkPath,
 			currentTarget: status.current.target,
 			proposedTarget: status.proposedTarget,
@@ -370,12 +373,12 @@ export async function unlinkCli(io: CliLinkIo, request: CliLinkRequest): Promise
 	if (!view.ok) return view;
 	const { status } = view;
 	if (status.current.kind === "foreign") {
-		return failure("foreign", status.message ?? "The existing command is not an Agent Orchestrator link.", {
+		return failure("foreign", status.message ?? `The existing command is not an ${PRODUCT.productName} link.`, {
 			linkPath: status.linkPath, currentTarget: status.current.target,
 		});
 	}
 	if (!request.confirmReplacement || request.expectedTarget !== (status.current.kind === "missing" ? null : status.current.target)) {
-		return failure("confirmation-required", `Remove the Agent Orchestrator link at ${status.linkPath}?`, {
+		return failure("confirmation-required", `Remove the ${PRODUCT.productName} link at ${status.linkPath}?`, {
 			linkPath: status.linkPath,
 			currentTarget: status.current.kind === "missing" ? null : status.current.target,
 		});
@@ -385,7 +388,7 @@ export async function unlinkCli(io: CliLinkIo, request: CliLinkRequest): Promise
 	}
 	const latest = await classify(io, status.linkPath, request.appCliPath, await readMarker(io, request.dataDir));
 	if (latest.kind === "foreign" || latest.kind === "missing" || latest.target !== status.current.target) {
-		return failure("foreign", `The command at ${status.linkPath} is not an Agent Orchestrator link. It was left unchanged.`, {
+		return failure("foreign", `The command at ${status.linkPath} is not an ${PRODUCT.productName} link. It was left unchanged.`, {
 			linkPath: status.linkPath,
 		});
 	}

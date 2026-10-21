@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type { components } from "../../api/schema";
 import { aoBridge } from "./bridge";
@@ -19,6 +21,7 @@ const EVENTSOURCE_CLOSED = 2;
 // HTTP responses and SSE deletes can arrive in either order. Keep recent
 // confirmations for deduplication, but never let that session state grow without bound.
 const MAX_CONFIRMED_NOTIFICATION_DELETIONS = 256;
+const MAX_SIGNALED_LIVE_NOTIFICATIONS = 256;
 
 /**
  * Only these two kinds describe something still waiting on the user.
@@ -507,6 +510,9 @@ export function createNotificationsTransport(
 ) {
 	return {
 		connect() {
+			// Snapshot reads can win the race with SSE. Cache presence must not
+			// stand in for delivery; only live creates can request an OS signal.
+			const signaledLiveIds = new Set<string>();
 			let retryTimer: ReturnType<typeof setTimeout> | undefined;
 			let source: EventSource | undefined;
 			let sourceBaseUrl: string | undefined;
@@ -543,9 +549,21 @@ export function createNotificationsTransport(
 					}
 					return;
 				}
-				const inserted = mergeUnreadNotification(queryClient, event.notification);
+				const notification = event.notification;
+				if (signaledLiveIds.has(notification.id) || deletionStates(queryClient).has(notification.id)) return;
+				// An older create must not revive an already read/resolved row when
+				// a newer snapshot or acknowledgement arrived first.
+				const superseded = [unreadNotificationsQueryKey, recentNotificationsQueryKey].some((queryKey) =>
+					getCachedNotifications(queryClient.getQueryData<NotificationsCache>(queryKey)).some((item) =>
+						item.id === notification.id && (item.status === "read" || Boolean(item.resolvedAt)),
+					),
+				);
+				if (superseded) return;
+				mergeUnreadNotification(queryClient, notification);
 				mergeRecentNotification(queryClient, event.notification);
-				if (inserted) {
+				if (notification.status === "unread") {
+					signaledLiveIds.add(notification.id);
+					if (signaledLiveIds.size > MAX_SIGNALED_LIVE_NOTIFICATIONS) signaledLiveIds.delete(signaledLiveIds.values().next().value!);
 					void aoBridge.notifications.show({
 						id: event.notification.id,
 						title: event.notification.title,

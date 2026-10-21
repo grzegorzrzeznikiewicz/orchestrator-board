@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 name: Release latest guard
 
 # Guard against accidental non-stable GitHub releases taking over
@@ -11,10 +13,9 @@ on:
 
 jobs:
   latest-release:
-    # Stable /releases/latest only exists on the canonical repo. Forks copy
-    # this workflow (including the hourly schedule) but have no desktop
-    # release, so the check fails red every hour.
-    if: github.repository == 'Untrivial-ai/agent-orchestrator'
+    # The product fork has no stable release yet. Once one exists, enforce the
+    # same feed contract on every event without accepting an upstream fallback.
+    if: github.repository == 'grzegorzrzeznikiewicz/orchestrator-board'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,6 +27,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          stable_count="$(gh release list --repo "$REPO" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq 'length')"
+          if [[ "$stable_count" == 0 ]]; then
+            echo "::notice::No stable fork release exists yet; update delivery is not available."
+            exit 0
+          fi
 
           release_json="$(gh release view --repo "$REPO" --json tagName,isPrerelease,isDraft,assets)"
           tag="$(jq -r '.tagName' <<<"$release_json")"
@@ -64,7 +71,7 @@ jobs:
     # frontend/package.json's version feeds CFBundleShortVersionString and the
     # in-app Settings -> Updates display, so main must not fall behind the
     # latest stable tag (see #4467).
-    if: github.repository == 'Untrivial-ai/agent-orchestrator'
+    if: github.repository == 'grzegorzrzeznikiewicz/orchestrator-board'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,6 +89,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          stable_count="$(gh release list --repo "$REPO" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq 'length')"
+          if [[ "$stable_count" == 0 ]]; then
+            echo "::notice::No stable fork release exists yet; update delivery is not available."
+            exit 0
+          fi
 
           tag="$(gh release view --repo "$REPO" --json tagName -q '.tagName')"
           release_version="${tag#v}"

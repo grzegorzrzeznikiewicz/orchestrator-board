@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package cli
 
 import (
@@ -16,7 +18,7 @@ import (
 	"time"
 )
 
-// writeMarker writes a ~/.ao/app-state.json marker pointing at appPath into the
+// writeMarker writes a ~/.ao/orchestrator-board-app-state.json marker pointing at appPath into the
 // configured state dir (AO_RUN_FILE's directory).
 func writeMarker(t *testing.T, cfg testConfig, appPath string) {
 	t.Helper()
@@ -42,6 +44,13 @@ func makeBundle(t *testing.T, name string) string {
 	p := filepath.Join(t.TempDir(), name)
 	if runtime.GOOS == "darwin" {
 		if err := os.MkdirAll(p, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		contents := filepath.Join(p, "Contents")
+		if err := os.MkdirAll(contents, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(`<plist><dict><key>CFBundleIdentifier</key><string>com.gamasoftware.orchestrator-board</string></dict></plist>`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		return p
@@ -173,16 +182,16 @@ func TestAssetName_PerOS(t *testing.T) {
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		if got != "agent-orchestrator-darwin-arm64.zip" && got != "agent-orchestrator-darwin-x64.zip" {
+		if got != "orchestrator-board-darwin-arm64.zip" && got != "orchestrator-board-darwin-x64.zip" {
 			t.Fatalf("darwin assetName = %q", got)
 		}
 	case "windows":
-		if got != "agent-orchestrator-win32-x64.exe" {
-			t.Fatalf("windows assetName = %q, want agent-orchestrator-win32-x64.exe", got)
+		if got != "orchestrator-board-win32-x64.exe" {
+			t.Fatalf("windows assetName = %q, want orchestrator-board-win32-x64.exe", got)
 		}
 	case "linux":
-		if got != "agent-orchestrator-linux-x64.AppImage" {
-			t.Fatalf("linux assetName = %q, want agent-orchestrator-linux-x64.AppImage", got)
+		if got != "orchestrator-board-linux-x64.AppImage" {
+			t.Fatalf("linux assetName = %q, want orchestrator-board-linux-x64.AppImage", got)
 		}
 	}
 }
@@ -202,7 +211,7 @@ func TestRequireAMD64(t *testing.T) {
 
 func TestWindowsInstalledExe(t *testing.T) {
 	got := windowsInstalledExe("C:\\Users\\me\\AppData\\Local")
-	want := filepath.Join("C:\\Users\\me\\AppData\\Local", "Programs", "Agent Orchestrator", "agent-orchestrator.exe")
+	want := filepath.Join("C:\\Users\\me\\AppData\\Local", "Programs", "Orchestrator Board", "orchestrator-board.exe")
 	if got != want {
 		t.Fatalf("windowsInstalledExe = %q, want %q", got, want)
 	}
@@ -225,11 +234,11 @@ func TestKnownAppLocations_HostOS(t *testing.T) {
 
 func TestIsUsableBundle_RegularFileVsDir(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "agent-orchestrator.AppImage")
+	file := filepath.Join(dir, "orchestrator-board.AppImage")
 	if err := os.WriteFile(file, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	subdir := filepath.Join(dir, "Agent Orchestrator.app")
+	subdir := makeBundle(t, appBundleName)
 	if err := os.MkdirAll(subdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -255,14 +264,22 @@ func TestIsUsableBundle_RegularFileVsDir(t *testing.T) {
 }
 
 func TestDownloadURLUsesReleaseRepo(t *testing.T) {
-	orig := releaseRepo
-	releaseRepo = "owner/repo"
-	t.Cleanup(func() { releaseRepo = orig })
-
-	got := downloadURL("agent-orchestrator-darwin-arm64.zip")
-	want := "https://github.com/owner/repo/releases/latest/download/agent-orchestrator-darwin-arm64.zip"
+	got := downloadURL("orchestrator-board-darwin-arm64.zip")
+	want := "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/latest/download/orchestrator-board-darwin-arm64.zip"
 	if got != want {
 		t.Fatalf("downloadURL = %q, want %q", got, want)
+	}
+}
+
+func TestResolveAppRejectsOriginalMarker(t *testing.T) {
+	cfg := setConfigEnv(t)
+	original := makeBundle(t, "Agent Orchestrator.app")
+	writeMarker(t, cfg, original)
+	t.Cleanup(swapScanLocations(func() []string { return nil }))
+	t.Cleanup(swapPreferredAppPath(func() string { return "" }))
+	c := &commandContext{deps: Deps{}.withDefaults()}
+	if got := c.resolveApp(); got != "" {
+		t.Fatalf("selected original installation: %q", got)
 	}
 }
 
@@ -280,7 +297,7 @@ func TestRegisterLinuxProtocolHandler(t *testing.T) {
 		},
 	}.withDefaults()}
 
-	appPath := "/tmp/Agent Orchestrator 100%.AppImage"
+	appPath := "/tmp/Orchestrator Board 100%.AppImage"
 	if err := c.registerLinuxProtocolHandler(context.Background(), appPath); err != nil {
 		t.Fatal(err)
 	}
@@ -290,15 +307,15 @@ func TestRegisterLinuxProtocolHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(entry)
-	if !strings.Contains(content, `Exec="/tmp/Agent Orchestrator 100%%.AppImage" %u`) {
+	if !strings.Contains(content, `Exec="/tmp/Orchestrator Board 100%%.AppImage" %u`) {
 		t.Fatalf("desktop entry does not safely target AppImage:\n%s", content)
 	}
-	if !strings.Contains(content, "MimeType=x-scheme-handler/ao-app;") {
-		t.Fatalf("desktop entry does not register ao-app:\n%s", content)
+	if !strings.Contains(content, "MimeType=x-scheme-handler/orchestrator-board;") {
+		t.Fatalf("desktop entry does not register orchestrator-board:\n%s", content)
 	}
 	wantCommands := [][]string{
-		{"xdg-mime", "default", linuxDesktopEntryName, "x-scheme-handler/ao-app"},
-		{"xdg-mime", "query", "default", "x-scheme-handler/ao-app"},
+		{"xdg-mime", "default", linuxDesktopEntryName, "x-scheme-handler/orchestrator-board"},
+		{"xdg-mime", "query", "default", "x-scheme-handler/orchestrator-board"},
 	}
 	if !reflect.DeepEqual(commands, wantCommands) {
 		t.Fatalf("commands = %#v, want %#v", commands, wantCommands)
@@ -319,7 +336,7 @@ func TestOpenApp_ArgConstruction(t *testing.T) {
 		},
 	}.withDefaults()}
 
-	opened, err := c.openApp(context.Background(), "/Applications/Agent Orchestrator.app")
+	opened, err := c.openApp(context.Background(), "/Applications/Orchestrator Board.app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +346,7 @@ func TestOpenApp_ArgConstruction(t *testing.T) {
 	if gotName != "open" {
 		t.Fatalf("command = %q, want open", gotName)
 	}
-	wantArgs := []string{"/Applications/Agent Orchestrator.app", "--args", "--installed-via=npm-bootstrap"}
+	wantArgs := []string{"/Applications/Orchestrator Board.app", "--args", "--installed-via=npm-bootstrap"}
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", gotArgs, wantArgs)
 	}
@@ -347,7 +364,7 @@ func TestOpenApp_DetachedSpawnOnWinLinux(t *testing.T) {
 		},
 	}.withDefaults()}
 
-	appPath := "/some/agent-orchestrator.AppImage"
+	appPath := "/some/orchestrator-board.AppImage"
 	opened, err := c.openApp(context.Background(), appPath)
 	if err != nil {
 		t.Fatal(err)
@@ -421,15 +438,11 @@ func TestDownload_NonTTYProgress(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	orig := releaseRepo
-	releaseRepo = "owner/repo"
-	t.Cleanup(func() { releaseRepo = orig })
-
 	c := &commandContext{deps: Deps{}.withDefaults()}
 	dst := filepath.Join(t.TempDir(), "out.zip")
 
 	var buf bytes.Buffer
-	if err := c.download(context.Background(), &buf, srv.URL, "agent-orchestrator.zip", dst); err != nil {
+	if err := c.download(context.Background(), &buf, srv.URL, "orchestrator-board.zip", dst); err != nil {
 		t.Fatalf("download failed: %v", err)
 	}
 
@@ -447,10 +460,10 @@ func TestDownload_NonTTYProgress(t *testing.T) {
 		t.Fatalf("non-TTY progress must not emit carriage returns, got %q", out)
 	}
 	// Start line: asset name, size, and repo are all present.
-	if !strings.Contains(out, "Downloading Agent Orchestrator (agent-orchestrator.zip, ") {
+	if !strings.Contains(out, "Downloading Orchestrator Board (orchestrator-board.zip, ") {
 		t.Fatalf("missing start line in %q", out)
 	}
-	if !strings.Contains(out, "from owner/repo...") {
+	if !strings.Contains(out, "from grzegorzrzeznikiewicz/orchestrator-board...") {
 		t.Fatalf("start line missing repo in %q", out)
 	}
 	// Done line is present (the only per-copy line off a TTY).
@@ -486,7 +499,7 @@ func TestDownload_NoContentLengthOmitsSize(t *testing.T) {
 	if strings.Contains(out, "~") {
 		t.Fatalf("size segment should be omitted without Content-Length, got %q", out)
 	}
-	if !strings.Contains(out, "Downloading Agent Orchestrator (asset.bin) from") {
+	if !strings.Contains(out, "Downloading Orchestrator Board (asset.bin) from") {
 		t.Fatalf("unexpected start line in %q", out)
 	}
 	if !strings.Contains(out, "Downloaded ") {
@@ -522,4 +535,40 @@ func swapScanLocations(fn func() []string) func() {
 	orig := appScanLocations
 	appScanLocations = fn
 	return func() { appScanLocations = orig }
+}
+
+func TestIsUsableBundleRejectsOriginalIdentity(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS bundle identity")
+	}
+	bundle := makeBundle(t, appBundleName)
+	if err := os.MkdirAll(filepath.Join(bundle, "Contents"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "Contents", "Info.plist"), []byte(`<plist><dict><key>CFBundleIdentifier</key><string>dev.agent-orchestrator.desktop</string></dict></plist>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isUsableBundle(bundle) {
+		t.Fatal("accepted upstream bundle with fork filename")
+	}
+}
+
+func TestLauncherProductMetadataParity(t *testing.T) {
+	data, err := os.ReadFile("../../../frontend/product.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var product struct {
+		ProductName    string
+		AppID          string
+		ExecutableName string
+		AuthProtocol   string
+		ReleaseRepo    string
+	}
+	if err := json.Unmarshal(data, &product); err != nil {
+		t.Fatal(err)
+	}
+	if product.ReleaseRepo != releaseRepo || product.ProductName+".app" != appBundleName || product.AppID != "com.gamasoftware.orchestrator-board" || product.ExecutableName != "orchestrator-board" || product.AuthProtocol != "orchestrator-board" {
+		t.Fatalf("launcher disagrees with product metadata: %+v", product)
+	}
 }

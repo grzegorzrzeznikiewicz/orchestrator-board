@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package store contains SQLite-backed table stores built on sqlc-generated
 // queries.
 package store

@@ -1,9 +1,12 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { getMDXComponents } from "@/components/mdx";
 import { source } from "@/lib/source";
+import { COMPANY } from "@/lib/constants";
 import { visibleProductName } from "@/lib/branding";
 
 export default async function Page(props: PageProps<"/[[...slug]]">) {
@@ -15,7 +18,7 @@ export default async function Page(props: PageProps<"/[[...slug]]">) {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsTitle>{visibleProductName(page.data.title)}</DocsTitle>
       <DocsDescription>{page.data.description && visibleProductName(page.data.description)}</DocsDescription>
       <DocsBody>
         <MDX
@@ -38,7 +41,7 @@ export async function generateMetadata(props: PageProps<"/[[...slug]]">): Promis
   if (!page) notFound();
 
   return {
-    title: `${page.data.title} | Agent Orchestrator Docs`,
-    description: page.data.description,
+    title: `${visibleProductName(page.data.title)} | ${COMPANY.NAME} Docs`,
+    description: page.data.description && visibleProductName(page.data.description),
   };
 }

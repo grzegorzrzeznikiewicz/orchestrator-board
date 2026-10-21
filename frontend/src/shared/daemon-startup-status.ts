@@ -1,7 +1,12 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
+import { PRODUCT } from "./product";
 import type { DaemonStatus } from "./daemon-status";
 
 export const SLOW_DAEMON_START_MESSAGE =
-	"AO daemon is still starting. Session recovery can take a while.";
+	`${PRODUCT.productName} daemon is still starting. Session recovery can take a while.`;
 
 type SlowDaemonStartupInput = {
 	output: string;

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import type { ReviewRunFacts } from "../lib/session-reviews";

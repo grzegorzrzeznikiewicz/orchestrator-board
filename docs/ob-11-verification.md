@@ -1,4 +1,6 @@
 # OB-11 — weryfikacja CI
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Zmiany przygotowano na `feature/OB-11`, od `origin/main` (`df4cabc`).
 Raport dotyczy lokalnej weryfikacji przed publikacją zmian.

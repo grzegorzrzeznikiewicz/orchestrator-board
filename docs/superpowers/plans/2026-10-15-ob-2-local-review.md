@@ -1,4 +1,6 @@
 # OB 2 Local review Implementation Plan
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 > Execution: superpowers:executing-plans, directly in the actual project directory. User workspace rules prohibit additional worktrees, commits and pushes.
 

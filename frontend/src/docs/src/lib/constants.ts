@@ -1,6 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../../../shared/product";
 export const COMPANY = {
-  NAME: "Orchestrator",
-  MARKETING_URL: "https://orchestrator.inc",
-  DOCS_URL: "https://docs.orchestrator.inc",
-  GITHUB_URL: "https://github.com/Untrivial-ai/agent-orchestrator",
+  NAME: PRODUCT.productName,
+  MARKETING_URL: PRODUCT.sourceUrl,
+  GITHUB_URL: PRODUCT.sourceUrl,
 } as const;

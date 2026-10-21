@@ -1,5 +1,25 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import floorPolicy from "../../../desktop-version-floor.json";
+import { assertForkReleaseUrl } from "./release-source";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+const originalResources = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+let resources: string;
+beforeEach(() => {
+  resources = mkdtempSync(path.join(os.tmpdir(), "ob-feed-"));
+  writeFileSync(path.join(resources, "app-update.yml"), "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n");
+  Object.defineProperty(process, "resourcesPath", { configurable: true, value: resources });
+});
+afterEach(() => {
+  rmSync(resources, { recursive: true, force: true });
+  if (originalResources) Object.defineProperty(process, "resourcesPath", originalResources);
+  else Reflect.deleteProperty(process, "resourcesPath");
+});
+
 
 describe("checkDesktopVersionFloor", () => {
   afterEach(() => {
@@ -40,6 +60,27 @@ describe("checkDesktopVersionFloor", () => {
     const mod = await import("./desktop-version-floor");
     return { mod, dialog, shellMock, quit, fetchMock };
   }
+
+  it("keeps the checked-in version policy on this fork's release destination", () => {
+    expect(() => assertForkReleaseUrl(floorPolicy.downloadUrl)).not.toThrow();
+  });
+
+  it("rejects a foreign repository download without opening it or forcing quit", async () => {
+    const { mod, dialog, shellMock, quit } = await importModule({ floor: { min: "99.0.0", downloadUrl: "https://github.com/other/project/releases/latest" } });
+    dialog.showMessageBox.mockResolvedValue({ response: 0 });
+    await mod.checkDesktopVersionFloor();
+    expect(shellMock.openExternal).not.toHaveBeenCalled();
+    expect(quit).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing", "foreign", "malformed"])("does not network when source config is %s", async fault => {
+    const config = path.join(resources, "app-update.yml");
+    if (fault === "missing") rmSync(config);
+    else writeFileSync(config, fault === "foreign" ? "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n" : "provider: [github");
+    const { mod, fetchMock } = await importModule();
+    await mod.checkDesktopVersionFloor();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   it("does nothing when app is not packaged", async () => {
     const { mod, fetchMock } = await importModule({ isPackaged: false });
@@ -92,11 +133,11 @@ describe("checkDesktopVersionFloor", () => {
   it("opens the download URL when user clicks Download on required update", async () => {
     const { mod, dialog, shellMock, quit } = await importModule({
       version: "0.12.12",
-      floor: { min: "0.12.13", downloadUrl: "https://github.com/Untrivial-ai/agent-orchestrator/releases/tag/v0.12.13" },
+      floor: { min: "0.12.13", downloadUrl: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/tag/v0.12.13" },
     });
     dialog.showMessageBox.mockResolvedValue({ response: 0 });
     await mod.checkDesktopVersionFloor();
-    expect(shellMock.openExternal).toHaveBeenCalledWith("https://github.com/Untrivial-ai/agent-orchestrator/releases/tag/v0.12.13");
+    expect(shellMock.openExternal).toHaveBeenCalledWith("https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/tag/v0.12.13");
     expect(quit).toHaveBeenCalled();
   });
 

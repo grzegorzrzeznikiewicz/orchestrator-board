@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import type { Page } from "@playwright/test";
 
 import type { UpdateSettings, UpdateStatus } from "../../src/main/update-settings";

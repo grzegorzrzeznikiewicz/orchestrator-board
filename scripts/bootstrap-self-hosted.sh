@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 # Fresh Ubuntu x64 entry point. The lower-level installer owns AO releases and service setup.
 set -euo pipefail
 
@@ -51,7 +53,7 @@ stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
 installer="$stage/setup-self-hosted.sh"
 if [[ -z "$source_ref" ]]; then
-	curl -fsSL https://raw.githubusercontent.com/Untrivial-ai/agent-orchestrator/main/scripts/setup-self-hosted.sh -o "$installer"
+	curl -fsSL https://raw.githubusercontent.com/grzegorzrzeznikiewicz/orchestrator-board/main/scripts/setup-self-hosted.sh -o "$installer"
 else
 	sudo apt-get install -y build-essential pkg-config xz-utils
 	tools="$HOME/.local/ao-build-tools"
@@ -70,7 +72,7 @@ else
 		tar -xJf "$stage/node.tar.xz" -C "$tools"
 	fi
 	export PATH="$tools/go/bin:$tools/node-v22.23.2-linux-x64/bin:$PATH"
-	git clone --depth 1 --single-branch --branch "$source_ref" https://github.com/Untrivial-ai/agent-orchestrator.git "$stage/source"
+	git clone --depth 1 --single-branch --branch "$source_ref" https://github.com/grzegorzrzeznikiewicz/orchestrator-board.git "$stage/source"
 	(
 		cd "$stage/source/frontend"
 		export GOMAXPROCS=2 NODE_OPTIONS=--max-old-space-size=1536

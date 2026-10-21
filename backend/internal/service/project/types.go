@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package project
 
 import "github.com/aoagents/agent-orchestrator/backend/internal/domain"
