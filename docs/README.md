@@ -12,6 +12,7 @@ Start with [architecture.md](architecture.md) for the current backend model and
 
 See [fork identity, updates and data compatibility](ob-10-fork-identity.md) for this distribution.
 
+- [Pierwsze uruchomienie macOS — Codex, Claude i workflow Local](ob-8-first-run.md): osobisty DMG, logowanie agentów, komendy testowe, akceptacja i sprawdzenie restartu.
 - [Automatyczny workflow zadań Local](automatic-local-workflow.md): start po poleceniu, plan kontroli code/report, poprawki, restart i historia.
 
 ## Reference docs
