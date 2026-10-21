@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useUiStore } from "../../stores/ui-store";
 import { createCloudCpClient, type CloudCpClient } from "./index";
 import { queryClient } from "../query-client";

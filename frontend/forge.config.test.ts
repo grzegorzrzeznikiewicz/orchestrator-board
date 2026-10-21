@@ -1,6 +1,9 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { MachOParseError } from "./makers/macho-archs";
 
@@ -22,7 +25,8 @@ vi.mock("./makers/maker-dmg", async (importOriginal) => {
 	return { ...actual, sealDmg, verifyDmg, verifyMacArtifact, isSigningConfigured };
 });
 
-import config, { extraResourcesForPlatform, macSignOptionsForFile } from "./forge.config";
+import MakerDMG from "./makers/maker-dmg";
+import config, { extraResourcesForPlatform, macSignOptionsForFile, buildReleaseFeed, verifyPackagedProductResources } from "./forge.config";
 
 // Minimal synthetic Mach-O headers (thin little-endian + fat big-endian), the
 // two on-disk layouts the signing selector must tell apart. Full parser
@@ -65,7 +69,7 @@ let fixtureDir: string;
 function acpNodeWith(contents: Buffer): string {
 	const binDir = join(
 		fixtureDir,
-		"Agent Orchestrator.app",
+		"Orchestrator Board.app",
 		"Contents",
 		"Resources",
 		"acp-runtime",
@@ -153,7 +157,7 @@ describe("macOS signing", () => {
 	});
 
 	it("keeps electron-osx-sign defaults for every other bundle file", () => {
-		const foreign = join(fixtureDir, "elsewhere", "agent-orchestrator");
+		const foreign = join(fixtureDir, "elsewhere", "orchestrator-board");
 		mkdirSync(join(fixtureDir, "elsewhere"), { recursive: true });
 		writeFileSync(foreign, thinMachO(CPU_TYPE_X86_64));
 		expect(macSignOptionsForFile(foreign)).toEqual({});
@@ -218,16 +222,16 @@ describe("postMake artifact verification", () => {
 
 	it("verifies a signed zip with the canonical script, gated on isSigningConfigured", async () => {
 		isSigningConfigured.mockReturnValue(true);
-		const makeResults = darwinResult(["/out/make/zip/agent-orchestrator-darwin-x64.zip"]);
+		const makeResults = darwinResult(["/out/make/zip/orchestrator-board-darwin-x64.zip"]);
 
 		await config.hooks?.postMake?.({} as never, makeResults);
 
-		expect(verifyMacArtifact).toHaveBeenCalledWith("/out/make/zip/agent-orchestrator-darwin-x64.zip");
+		expect(verifyMacArtifact).toHaveBeenCalledWith("/out/make/zip/orchestrator-board-darwin-x64.zip");
 	});
 
 	it("skips zip verification for an unsigned local build", async () => {
 		isSigningConfigured.mockReturnValue(false);
-		const makeResults = darwinResult(["/out/make/zip/agent-orchestrator-darwin-x64.zip"]);
+		const makeResults = darwinResult(["/out/make/zip/orchestrator-board-darwin-x64.zip"]);
 
 		await config.hooks?.postMake?.({} as never, makeResults);
 
@@ -250,20 +254,20 @@ describe("postMake artifact verification", () => {
 		isSigningConfigured.mockReturnValue(true);
 		sealDmg.mockResolvedValue(true);
 		const makeResults = darwinResult([
-			"/out/make/zip/agent-orchestrator-darwin-x64.zip",
+			"/out/make/zip/orchestrator-board-darwin-x64.zip",
 			"/out/make/app.dmg",
 		]);
 
 		await config.hooks?.postMake?.({} as never, makeResults);
 
-		expect(verifyMacArtifact).toHaveBeenCalledWith("/out/make/zip/agent-orchestrator-darwin-x64.zip");
+		expect(verifyMacArtifact).toHaveBeenCalledWith("/out/make/zip/orchestrator-board-darwin-x64.zip");
 		expect(verifyDmg).toHaveBeenCalledWith("/out/make/app.dmg");
 	});
 
 	it("never verifies non-darwin artifacts", async () => {
 		const makeResults = [
 			{
-				artifacts: ["/out/make/agent-orchestrator.exe"],
+				artifacts: ["/out/make/orchestrator-board.exe"],
 				packageJSON: {},
 				platform: "win32" as const,
 				arch: "x64" as const,
@@ -279,11 +283,11 @@ describe("postMake artifact verification", () => {
 });
 
 describe("packaged authentication callback registration", () => {
-	it("declares ao-app in the macOS bundle and Linux package metadata", () => {
+	it("declares orchestrator-board in the macOS bundle and Linux package metadata", () => {
 		expect(config.packagerConfig?.protocols).toEqual([
 			{
-				name: "Agent Orchestrator authentication callback",
-				schemes: ["ao-app"],
+				name: "Orchestrator Board authentication callback",
+				schemes: ["orchestrator-board"],
 			},
 		]);
 
@@ -297,7 +301,7 @@ describe("packaged authentication callback registration", () => {
 		]) {
 			const maker = makers.find((candidate) => candidate.name === name);
 			expect(maker?.config?.options?.mimeType).toEqual([
-				"x-scheme-handler/ao-app",
+				"x-scheme-handler/orchestrator-board",
 			]);
 		}
 	});
@@ -317,5 +321,65 @@ describe("packaged native dependencies", () => {
 		expect(ignore("/node_modules/react/index.js")).toBe(true);
 		expect(ignore("/src/main.ts")).toBe(true);
 		expect(config.hooks?.prePackage).toBeTypeOf("function");
+	});
+});
+
+
+describe("fork package identity", () => {
+	it("uses independent product identity and sealed license resources", () => {
+		expect(config.packagerConfig).toMatchObject({name: "Orchestrator Board", appBundleId: "com.gamasoftware.orchestrator-board", executableName: "orchestrator-board"});
+		for (const platform of ["darwin", "linux", "win32"] as const) expect(extraResourcesForPlatform(platform)).toContain("resources/licenses");
+	});
+	it("uses the company icon for the mounted DMG instead of Electron's fallback", async () => {
+		const maker = config.makers?.find((candidate) => candidate instanceof MakerDMG);
+		expect(maker).toBeInstanceOf(MakerDMG);
+		if (!(maker instanceof MakerDMG)) throw new Error("DMG maker is missing");
+		await maker.prepareConfig("arm64");
+		expect(maker.config.dmg?.icon).toBe(join(process.cwd(), "assets", "icon.icns"));
+	});
+
+	it.runIf(process.platform === "darwin")("sets the human display name before signing and preserves executable identity", async () => {
+		const contents = join(fixtureDir, "Orchestrator Board.app", "Contents");
+		mkdirSync(contents, { recursive: true });
+		const info = join(contents, "Info.plist");
+		writeFileSync(info, `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleDisplayName</key><string>orchestrator-board</string><key>CFBundleExecutable</key><string>orchestrator-board</string><key>CFBundleIdentifier</key><string>com.gamasoftware.orchestrator-board</string></dict></plist>`);
+		const hook = config.packagerConfig?.afterCopyExtraResources?.[0];
+		expect(hook).toBeTypeOf("function");
+		if (!hook) throw new Error("Pre-signing metadata hook is missing");
+		await new Promise<void>((resolve, reject) => hook(fixtureDir, "33.4.11", "darwin", "arm64", (error) => error ? reject(error) : resolve()));
+		const result = spawnSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", info], { encoding: "utf8" });
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({ CFBundleDisplayName: "Orchestrator Board", CFBundleExecutable: "orchestrator-board", CFBundleIdentifier: "com.gamasoftware.orchestrator-board" });
+	});
+
+	it.runIf(process.platform === "darwin")("aborts before signing when the product plist cannot be updated", async () => {
+		const hook = config.packagerConfig?.afterCopyExtraResources?.[0];
+		if (!hook) throw new Error("Pre-signing metadata hook is missing");
+		await expect(new Promise<void>((resolve, reject) => hook(fixtureDir, "33.4.11", "darwin", "arm64", (error) => error ? reject(error) : resolve()))).rejects.toThrow("display name before signing");
+	});
+
+	it.each(["", "bad", "owner/repo/extra", "Untrivial-ai/agent-orchestrator"])("rejects foreign or malformed build repository %s", async (repo) => {
+		vi.stubEnv("AO_RELEASE_REPO", repo); vi.resetModules();
+		await expect(import("./forge.config")).rejects.toThrow("AO_RELEASE_REPO");
+	});
+	it("publishes only to the fork by default", () => {
+		expect(config.publishers?.[0]).toMatchObject({config: {repository: {owner: "grzegorzrzeznikiewicz", name: "orchestrator-board"}}});
+	});
+});
+
+describe("bundled release configuration", () => {
+	it("bakes only the known fork and distinct cache before signing", () => {
+		expect(buildReleaseFeed(undefined)).toBe("provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n");
+	});
+	it("checks actual packaged resources for the fork feed and license texts", () => {
+		writeFileSync(join(fixtureDir, "app-update.yml"), buildReleaseFeed(undefined));
+		mkdirSync(join(fixtureDir, "licenses"));
+		for (const file of ["LICENSE", "NOTICE", "THIRD-PARTY-LICENSES.txt", "ASSET-NOTICES.txt"]) writeFileSync(join(fixtureDir, "licenses", file), "license text");
+		expect(() => verifyPackagedProductResources(fixtureDir)).not.toThrow();
+		writeFileSync(join(fixtureDir, "app-update.yml"), "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n");
+		expect(() => verifyPackagedProductResources(fixtureDir)).toThrow("feed");
+		writeFileSync(join(fixtureDir, "app-update.yml"), buildReleaseFeed(undefined));
+		rmSync(join(fixtureDir, "licenses", "LICENSE"));
+		expect(() => verifyPackagedProductResources(fixtureDir)).toThrow("LICENSE");
 	});
 });

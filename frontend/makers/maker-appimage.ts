@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import path from "node:path";
 import { MakerBase, type MakerOptions } from "@electron-forge/maker-base";
 import type { ForgePlatform } from "@electron-forge/shared-types";
@@ -17,6 +19,8 @@ export type MakerAppImageConfig = {
 	appId?: string;
 	// Display name for the app. Defaults to appName.
 	productName?: string;
+	// Must match the binary already named by Forge's packager.
+	executableName?: string;
 	// Path to the PNG icon used for the app and desktop entry.
 	icon?: string;
 	// URL schemes written to the AppImage desktop entry.
@@ -66,6 +70,7 @@ export default class MakerAppImage extends MakerBase<MakerAppImageConfig> {
 					publish: null,
 					linux: {
 						...(cfg.icon ? { icon: cfg.icon } : {}),
+						...(cfg.executableName ? { executableName: cfg.executableName } : {}),
 					},
 					appImage: {
 						...cfg.appImage,

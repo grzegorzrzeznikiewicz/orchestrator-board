@@ -1,3 +1,4 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
@@ -44,12 +45,13 @@ import {
 	type JSX,
 	type KeyboardEvent,
 } from "react";
-import { Box, Image as ImageIcon } from "lucide-react";
+import { ArrowDownLeft, Box, Image as ImageIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { composerFileIcon } from "./composerFileIcon";
 import { findActiveTrigger, type TriggerKind } from "./composerSuggest";
 import { splitInlineImagePaths } from "./messageAttachments";
+import { Button } from "../ui/button";
 
 export type ComposerTrigger = {
 	kind: TriggerKind;
@@ -411,6 +413,17 @@ function focusEditor(editor: LexicalEditor): void {
 	if (root && document.activeElement !== root) root.focus({ preventScroll: true });
 }
 
+function $insertPromptSuggestion(text: string): boolean {
+	if ($serializeComposer()) return false;
+	const selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+	$addUpdateTag(HISTORY_PUSH_TAG);
+	// Keep generated /skills and @paths literal, also after restoring the draft.
+	const trailingTrigger = findActiveTrigger(text, text.length);
+	selection.insertText(text + (trailingTrigger ? " " : ""));
+	return true;
+}
+
 const EditorBridge = forwardRef<
 	ComposerEditorHandle,
 	{
@@ -425,6 +438,7 @@ const EditorBridge = forwardRef<
 	}
 >(function EditorBridge({ disabled, promptSuggestion, onDismissSuggestion, attachedImages, onChange, onComplete, onEnter }, ref) {
 	const [editor] = useLexicalComposerContext();
+	const { t } = useTranslation();
 
 	useEffect(() => editor.setEditable(!disabled), [disabled, editor]);
 
@@ -505,13 +519,7 @@ const EditorBridge = forwardRef<
 				key === "Tab" && promptSuggestion && !snapshot.text &&
 				!event?.altKey && !event?.ctrlKey && !event?.metaKey
 			) {
-				const selection = $getSelection();
-				if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-				$addUpdateTag(HISTORY_PUSH_TAG);
-				// End a generated @path or /skill with a boundary, including after draft
-				// restore. Outgoing text is trimmed; ordinary prose stays unchanged.
-				const trailingTrigger = findActiveTrigger(promptSuggestion.text, promptSuggestion.text.length);
-				selection.insertText(promptSuggestion.text + (trailingTrigger ? " " : ""));
+				if (!$insertPromptSuggestion(promptSuggestion.text)) return false;
 				onDismissSuggestion();
 				if (event) {
 					completionHandledEvents.add(event);
@@ -564,7 +572,29 @@ const EditorBridge = forwardRef<
 		};
 	}, [editor, onComplete, onDismissSuggestion, onEnter, promptSuggestion]);
 
-	return null;
+	return promptSuggestion ? (
+		<div className="flex justify-end">
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+				onClick={() => {
+					let inserted = false;
+					editor.update(() => {
+						if (disabled || !editor.isEditable() || editor.isComposing() || $serializeComposer()) return;
+						$getRoot().selectEnd();
+						inserted = $insertPromptSuggestion(promptSuggestion.text);
+						if (inserted) onDismissSuggestion();
+					}, { discrete: true });
+					if (inserted) focusEditor(editor);
+				}}
+			>
+				<ArrowDownLeft aria-hidden="true" className="size-3.5" />
+				{t("chat.promptSuggestion.accept")}
+			</Button>
+		</div>
+	) : null;
 });
 
 /**
@@ -717,6 +747,7 @@ export const ComposerEditor = forwardRef<
 					</span>
 				) : null}
 				<HistoryPlugin />
+			</div>
 				<EditorBridge
 					ref={ref}
 					disabled={disabled}
@@ -727,7 +758,6 @@ export const ComposerEditor = forwardRef<
 					onComplete={onComplete}
 					onEnter={onEnter}
 				/>
-			</div>
 			</ComposerImages.Provider>
 		</LexicalComposer>
 	);

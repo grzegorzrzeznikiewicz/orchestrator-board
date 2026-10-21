@@ -1,4 +1,6 @@
 # OB-4 — automatyczna pętla lokalnego workflow
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Zadanie: [OB-4](https://gamasoftware.atlassian.net/browse/OB-4). Gałąź `feature/OB-4`, baza `c29627b` z main po scaleniu OB-3. Praca odbywa się w rzeczywistym katalogu projektu, bez dodatkowych worktree, commitów i push.
 

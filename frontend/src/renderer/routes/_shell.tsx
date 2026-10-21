@@ -55,7 +55,7 @@ import { applyDocumentTheme, applyDocumentThemeStyle } from "../lib/theme";
 import { applyWindowTranslucency } from "../lib/window-translucency";
 import { aoBridge } from "../lib/bridge";
 import { handleModifierLinkClick } from "../lib/external-link-policy";
-import { recordProjectOpened } from "../lib/project-history";
+import { useProjectNavigationPersistence } from "../hooks/useProjectNavigationPersistence";
 import { cn } from "../lib/utils";
 import {
 	isLinuxPlatform,
@@ -299,7 +299,7 @@ function ShellLayout() {
 	const { org: cloudOrg } = useCloudOrg();
 	useWorkspacePolling();
 	const workspaceQuery = useWorkspaceQuery();
-	const workspaces = workspaceQuery.data ?? [];
+	const workspaces = useMemo(() => workspaceQuery.data ?? [], [workspaceQuery.data]);
 	const { hosts: remoteHosts, refresh: refreshRemoteHosts } = useRemoteHosts();
 	const { data: remoteWorkspaces, failedHostIds: remoteFailedHostIds } = useRemoteWorkspaces();
 	const failedRemoteHostKey = remoteFailedHostIds.join("\0");
@@ -526,9 +526,7 @@ function ShellLayout() {
 	// The root route is the intentionally minimal home surface, regardless of
 	// whether projects have already been registered.
 	const isHomeRoute = Boolean(matchRoute({ to: "/" }));
-	useEffect(() => {
-		if (!routeParams.hostId && routeParams.projectId) recordProjectOpened(routeParams.projectId);
-	}, [routeParams.hostId, routeParams.projectId]);
+	useProjectNavigationPersistence({ workspaces, workspaceStartupState });
 	const isTerminalsRoute = Boolean(matchRoute({ to: "/terminals" }));
 	const isSettingsRoute =
 		Boolean(matchRoute({ to: "/settings", fuzzy: true })) ||

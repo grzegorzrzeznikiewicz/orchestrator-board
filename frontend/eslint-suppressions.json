@@ -367,11 +367,6 @@
       "count": 4
     }
   },
-  "src/renderer/routes/_shell.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/renderer/stores/sidebar-order-store.ts": {
     "no-empty": {
       "count": 1

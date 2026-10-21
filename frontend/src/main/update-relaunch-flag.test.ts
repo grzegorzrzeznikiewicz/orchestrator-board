@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -6,7 +8,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { consumeUpdateRelaunchFlag, markUpdateRelaunch } from "./update-relaunch-flag";
 
 let root: string;
-const markerFile = (dir: string) => path.join(dir, "update-restart", "relaunch-flag.json");
+const markerFile = (dir: string) => path.join(dir, "orchestrator-board-update-restart", "relaunch-flag.json");
 
 beforeEach(async () => {
 	root = await mkdtemp(path.join(os.tmpdir(), "ao-relaunch-flag-"));
@@ -42,11 +44,25 @@ it("returns false when there is no marker", async () => {
 
 it("never throws on a marker that is not a JSON object", async () => {
 	for (const contents of ["null", "42", '"oops"', "{ truncated", ""]) {
-		await mkdir(path.join(root, "update-restart"), { recursive: true });
+		await mkdir(path.join(root, "orchestrator-board-update-restart"), { recursive: true });
 		await writeFile(markerFile(root), contents);
 		await expect(consumeUpdateRelaunchFlag({ stateDir: root, version: "1.2.3", pid: 200, now: 2_000 })).resolves.toBe(
 			false,
 		);
 		await expect(readFile(markerFile(root), "utf8")).rejects.toThrow();
 	}
+});
+
+
+it("does not consume the original application's relaunch marker", async () => {
+  const legacyDir = path.join(root, "update-restart");
+  const legacy = path.join(legacyDir, "relaunch-flag.json");
+  await mkdir(legacyDir);
+  const contents = JSON.stringify({ version: "1.2.3", fromPID: 100, startedAt: 1_000 });
+  await writeFile(legacy, contents);
+  expect(await consumeUpdateRelaunchFlag({ stateDir: root, version: "1.2.3", now: 2_000 })).toBe(false);
+  expect(await readFile(legacy, "utf8")).toBe(contents);
+  await markUpdateRelaunch({ stateDir: root, version: "1.2.4", now: 2_000 });
+  expect(JSON.parse(await readFile(markerFile(root), "utf8")).version).toBe("1.2.4");
+  expect(await readFile(legacy, "utf8")).toBe(contents);
 });

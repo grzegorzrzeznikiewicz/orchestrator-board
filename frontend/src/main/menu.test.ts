@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildLinuxAppMenuTemplate,
@@ -116,4 +118,15 @@ describe("buildMacAppMenuTemplate", () => {
 		);
 	});
 
+});
+
+it("routes native macOS About to the fork attribution and license dialog", () => {
+ const onAbout = vi.fn();
+ const template = buildMacAppMenuTemplate(() => undefined, onAbout);
+ const application = template.find((item) => item.role === "appMenu");
+ const submenu = Array.isArray(application?.submenu) ? application.submenu : [];
+ const about = submenu.find((item) => item.label === "About Orchestrator Board");
+ expect(about).toBeDefined();
+ about?.click?.(undefined as never, undefined as never, undefined as never);
+ expect(onAbout).toHaveBeenCalledOnce();
 });

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,7 +18,7 @@ function render(ui: ReactNode) {
 // Drives the real useWorkspaceQuery + SessionsBoard end to end for the two
 // first-run states, mocking only the HTTP client, the router, and the native
 // folder picker: an empty daemon shows the import chooser (no column shells), a
-// fresh project shows the task invitation, and any session brings the columns back.
+// fresh project keeps its real workflow columns alongside the task invitation.
 const { getMock, postMock, deleteMock, navigateMock, chooseDirectoryMock, clipboardWriteMock, spawnOrchestratorMock, terminalPanePropsMock, paramsMock, boardActionsInPanelMock } = vi.hoisted(() => ({
 	getMock: vi.fn(),
 	postMock: vi.fn(),
@@ -98,7 +100,7 @@ import type { WorkspaceSummary } from "../../types/workspace";
 import { ShellProvider, type ShellContextValue } from "../../lib/shell-context";
 import { useUiStore } from "../../stores/ui-store";
 
-type Project = { id: string; name: string; path: string; orchestratorAgent?: string };
+type Project = { id: string; name: string; path: string; orchestratorAgent?: string; reviewMode?: "local" | "pr" };
 type Session = Record<string, unknown>;
 
 function respondWith(
@@ -199,8 +201,7 @@ function renderBoard(ui: ReactNode) {
 	);
 }
 
-// The kanban columns render as <section> elements; the empty states render none.
-const columnCount = () => document.querySelectorAll("section").length;
+const columnCount = () => document.querySelectorAll("section[data-column]").length;
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -229,6 +230,7 @@ beforeEach(() => {
 		provisioningProjectIds: new Set(),
 		restartingProjectIds: new Set(),
 		settingsModal: null,
+		newTaskRequest: null,
 	});
 });
 
@@ -273,7 +275,7 @@ describe("global board first launch", () => {
 		renderBoard(<SessionsBoard />);
 
 		expect(await screen.findByText("Add a project")).toBeInTheDocument();
-		expect(screen.getByText("Choose how you want to add code to Agent Orchestrator")).toBeInTheDocument();
+		expect(screen.getByText("Choose how you want to add code to Orchestrator Board")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Clone a repo" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Open a workspace" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Open a local folder" })).toBeInTheDocument();
@@ -472,16 +474,24 @@ describe("global board first launch", () => {
 });
 
 describe("project board with no sessions", () => {
-	it("shows the task invitation instead of empty columns", async () => {
-		respondWith([project], []);
+	it.each([
+		{ reviewMode: "pr", sessions: [], state: "no sessions", columns: ["Building", "Validating", "In review", "Ready"] },
+		{ reviewMode: "pr", sessions: [orchestratorSession], state: "only an orchestrator", columns: ["Building", "Validating", "In review", "Ready"] },
+		{ reviewMode: "local", sessions: [], state: "no sessions", columns: ["Execution", "Tests", "Local review", "Corrections", "Awaiting acceptance", "Accepted"] },
+		{ reviewMode: "local", sessions: [orchestratorSession], state: "only an orchestrator", columns: ["Execution", "Tests", "Local review", "Corrections", "Awaiting acceptance", "Accepted"] },
+	] as const)("keeps $reviewMode columns and task actions with $state", async ({ reviewMode, sessions, columns }) => {
+		respondWith([{ ...project, reviewMode }], [...sessions]);
 		renderBoard(<SessionsBoard projectId="proj-1" />);
 
 		expect(await screen.findByText("No worker sessions yet")).toBeInTheDocument();
-		// Both launchers remain reachable from the empty-state invitation.
-		expect(screen.getAllByRole("button", { name: "Spawn Orchestrator" }).length).toBeGreaterThan(0);
-		expect(screen.getAllByRole("button", { name: "New task" }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole("region", { name: / sessions$/ }).map((column) => column.getAttribute("aria-label")))
+			.toEqual(columns.map((label) => `${label} sessions`));
+		const invitation = screen.getByTestId("project-board-empty");
+		expect(within(invitation).getByRole("button", { name: /Orchestrator/ })).toBeEnabled();
+		await userEvent.click(within(invitation).getByRole("button", { name: "New task" }));
+		expect(useUiStore.getState().newTaskRequest?.projectId).toBe("proj-1");
 		expect(screen.queryByText("Add a project")).not.toBeInTheDocument();
-		expect(columnCount()).toBe(0);
+		expect(columnCount()).toBe(columns.length);
 	});
 
 	it("surfaces the daemon error when spawning the orchestrator fails", async () => {

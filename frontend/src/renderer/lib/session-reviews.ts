@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { queryOptions } from "@tanstack/react-query";
 import type { components } from "../../api/schema";
 import { appI18n } from "../i18n";

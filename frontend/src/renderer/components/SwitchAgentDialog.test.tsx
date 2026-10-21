@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -136,7 +138,7 @@ describe("SwitchAgentDialog", () => {
 		expect(backdrop).toHaveClass("agent-switch-terminal-scrim");
 		expect(
 			within(dialog).getByText(
-				"Move this session from Claude Code to another agent. AO will preserve the current native session and hand off the work.",
+				"Move this session from Claude Code to another agent. Orchestrator Board will preserve the current native session and hand off the work.",
 			),
 		).toBeInTheDocument();
 		expect(within(dialog).getByRole("button", { name: "Target agent" })).toBeInTheDocument();

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -34,7 +36,7 @@ export interface AppStateMarker {
 const SCHEMA_VERSION = 2;
 
 /** File name of the marker under the ~/.ao state dir. */
-export const APP_STATE_FILE_NAME = "app-state.json";
+export const APP_STATE_FILE_NAME = "orchestrator-board-app-state.json";
 
 export interface WriteAppStateOptions {
 	updateRestartProtocol?: 1;
@@ -88,7 +90,7 @@ async function atomicWriteMarker(stateDir: string, marker: AppStateMarker): Prom
 }
 
 /**
- * Write ~/.ao/app-state.json. The app is the SOLE writer (invariant 3) and
+ * Write ~/.ao/orchestrator-board-app-state.json. The app is the SOLE writer (invariant 3) and
  * writes on every launch. Mirrors the daemon's proven atomic write
  * (backend/internal/runfile/runfile.go Write): a temp file in the same dir
  * then an atomic rename, so a concurrent `ao start` reader never observes a

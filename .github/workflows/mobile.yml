@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 name: Mobile
 
 # Typechecks the Expo mobile app. Without this, changes under packages/mobile

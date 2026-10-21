@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 import { COMPANY } from "./constants";
 
@@ -8,7 +10,7 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
           <img
-            src={`${COMPANY.MARKETING_URL}/ao-logo.svg`}
+            src={"/orchestrator-board.svg"}
             alt=""
             width={20}
             height={20}
@@ -24,7 +26,7 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       {
-        text: "Main site",
+        text: "Project source",
         url: COMPANY.MARKETING_URL,
       },
       {

@@ -1,4 +1,6 @@
 # Pull request CI
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 The `CI` workflow runs on every PR to `main`, push to `main` and manual dispatch.
 The final job is `required` (shown under `CI` in the checks UI). Desktop packaging

@@ -1,0 +1,10 @@
+{
+  "productName": "Orchestrator Board",
+  "appId": "com.gamasoftware.orchestrator-board",
+  "executableName": "orchestrator-board",
+  "authProtocol": "orchestrator-board",
+  "releaseRepo": "grzegorzrzeznikiewicz/orchestrator-board",
+  "updaterCacheDirName": "orchestrator-board-updater",
+  "sourceUrl": "https://github.com/grzegorzrzeznikiewicz/orchestrator-board",
+  "supportUrl": "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues"
+}

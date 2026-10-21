@@ -1,3 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
+import { PRODUCT } from "../../shared/product";
 import { aoBridge } from "./bridge";
 import { routeSurface } from "./telemetry";
 
@@ -22,10 +27,6 @@ export type ReportProblemDiagnostics = {
 const REDACTED_LOCAL_PATH = "[redacted-local-path]";
 const REDACTED_LOCAL_URL = "[redacted-local-url]";
 const REDACTED_SECRET = "[redacted-secret]";
-const DISCORD_SUPPORT_URL = "https://discord.gg/WjKNa7EbB8";
-const GITHUB_NEW_ISSUE_URL = "https://github.com/Untrivial-ai/agent-orchestrator/issues/new";
-const SUPPORT_EMAIL = "prasad@untrivial.ai";
-const SUPPORT_CC_EMAIL = "prateek@untrivial.ai";
 
 const LOCAL_URL_PATTERN =
 	/(?:\bfile:\/\/\/\S+|\bapp:\/\/renderer\/\S+|\bhttps?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\S*)/gi;
@@ -83,7 +84,7 @@ export function formatReportProblemDraft(
 
 	if (output === "discord") {
 		return [
-			"**AO feedback**",
+			`**${PRODUCT.productName} feedback**`,
 			`Summary: ${fields.summary}`,
 			`Details: ${fields.details}`,
 			"",
@@ -94,16 +95,14 @@ export function formatReportProblemDraft(
 
 	if (output === "email") {
 		return [
-			`To: ${SUPPORT_EMAIL}`,
-			`Cc: ${SUPPORT_CC_EMAIL}`,
-			`Subject: AO feedback: ${fields.summary}`,
+			`Subject: ${PRODUCT.productName} feedback: ${fields.summary}`,
 			"",
 			formatEmailBody(fields, diagnosticsBlock),
 		].join("\n");
 	}
 
 	return [
-		`# ${fields.summary === "Not provided" ? "AO feedback" : fields.summary}`,
+		`# ${fields.summary === "Not provided" ? `${PRODUCT.productName} feedback` : fields.summary}`,
 		"",
 		"## Summary",
 		fields.summary,
@@ -120,44 +119,16 @@ export function reportProblemDestinationUrl(
 	input: ReportProblemInput,
 	diagnostics: ReportProblemDiagnostics,
 	output: ReportProblemOutput,
-	emailProvider: ReportProblemEmailProvider = "system",
+	_emailProvider: ReportProblemEmailProvider = "system",
 ): string | null {
-	if (output === "discord") return DISCORD_SUPPORT_URL;
-	if (output === "email") {
-		const subject = `AO feedback: ${reportTitle(input)}`;
-		const body = formatEmailBody(normalizeInput(input), formatDiagnostics(diagnostics));
-		if (emailProvider === "gmail") {
-			const url = new URL("https://mail.google.com/mail/");
-			url.searchParams.set("view", "cm");
-			url.searchParams.set("fs", "1");
-			url.searchParams.set("to", SUPPORT_EMAIL);
-			url.searchParams.set("cc", SUPPORT_CC_EMAIL);
-			url.searchParams.set("su", subject);
-			url.searchParams.set("body", body);
-			return url.toString();
-		}
-		if (emailProvider === "outlook") {
-			const url = new URL("https://outlook.office.com/mail/deeplink/compose");
-			url.searchParams.set("to", SUPPORT_EMAIL);
-			url.searchParams.set("cc", SUPPORT_CC_EMAIL);
-			url.searchParams.set("subject", subject);
-			url.searchParams.set("body", body);
-			return url.toString();
-		}
-		const url = new URL(`mailto:${SUPPORT_EMAIL}`);
-		url.searchParams.set("cc", SUPPORT_CC_EMAIL);
-		url.searchParams.set("subject", subject);
-		url.searchParams.set("body", body);
-		// Mail clients treat "+" literally, so encode spaces in the query only; the
-		// recipient must stay untouched or a plus-addressed support address breaks.
-		const query = url.searchParams.toString().replaceAll("+", "%20");
-		return `mailto:${url.pathname}?${query}`;
-	}
+	// This fork has no configured Discord or support-email contact. Never send
+	// own-product diagnostics to the original maintainers by falling back.
+	if (output !== "github") return null;
 
 	const title = reportTitle(input);
 	const draft = formatReportProblemDraft(input, diagnostics, output);
 
-	const url = new URL(GITHUB_NEW_ISSUE_URL);
+	const url = new URL(`${PRODUCT.supportUrl.replace(/\/$/, "")}/new`);
 	url.searchParams.set("title", title);
 	url.searchParams.set("body", draft);
 	return url.toString();
@@ -172,7 +143,7 @@ function normalizeInput(input: ReportProblemInput) {
 
 function formatEmailBody(fields: ReturnType<typeof normalizeInput>, diagnosticsBlock: string): string {
 	return [
-		"AO feedback",
+		`${PRODUCT.productName} feedback`,
 		"",
 		`Summary: ${fields.summary}`,
 		"",
@@ -186,7 +157,7 @@ function formatEmailBody(fields: ReturnType<typeof normalizeInput>, diagnosticsB
 
 function reportTitle(input: ReportProblemInput): string {
 	const summary = valueOrPlaceholder(input.summary);
-	return summary === "Not provided" ? "AO feedback" : summary;
+	return summary === "Not provided" ? `${PRODUCT.productName} feedback` : summary;
 }
 
 function valueOrPlaceholder(value: string): string {
@@ -196,7 +167,7 @@ function valueOrPlaceholder(value: string): string {
 
 function formatDiagnostics(diagnostics: ReportProblemDiagnostics): string {
 	const lines = [
-		`AO version: ${sanitizeReportText(diagnostics.appVersion) || "unknown"}`,
+		`${PRODUCT.productName} version: ${sanitizeReportText(diagnostics.appVersion) || "unknown"}`,
 		`Build mode: ${sanitizeReportText(diagnostics.buildMode) || "unknown"}`,
 		`Platform: ${sanitizeReportText(diagnostics.platform) || "unknown"}`,
 		`Route surface: ${sanitizeReportText(diagnostics.routeSurface) || "unknown"}`,

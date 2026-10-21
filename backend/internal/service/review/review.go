@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package review is the daemon's HTTP-facing code-review service boundary. The
 // core orchestration lives in internal/review; this layer is the thin contract
 // the API controller depends on and delegates to the engine, so the same engine

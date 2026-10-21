@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 # Cross-compile the Go `ao` binary (backend/cmd/ao) for every supported
 # platform and drop each into the matching platform package's bin/ dir.
 #
@@ -7,8 +9,8 @@
 # shipped in each npm tarball via that package's `files` entry.
 #
 # CGO-free build (modernc.org/sqlite driver) so cross-compilation needs no C
-# toolchain. Prod build: no -ldflags, so cli.releaseRepo keeps its default
-# (AgentWrapper/agent-orchestrator).
+# toolchain. The desktop release repository is pinned to the product fork;
+# production builds do not accept a foreign release target.
 set -euo pipefail
 
 # Repo layout: this script lives at <repo>/packages/build-binaries.sh.

@@ -1,3 +1,6 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import { PRODUCT } from "../../shared/product";
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, PanelLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -164,7 +167,7 @@ export function TitlebarNav({
             style={{ maxWidth: brandMaxWidth }}
           >
             <AOMascot className="h-5.5 w-5.5 shrink-0 -translate-y-px" />
-            <span className="min-w-0 truncate" data-brand-label="">Orchestrator.inc</span>
+            <span className="min-w-0 truncate" data-brand-label="">{PRODUCT.productName}</span>
           </span>
         ) : null}
         {arrowsVisible ? (

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TraySessionEntry } from "../shared/tray";
 
@@ -71,8 +73,8 @@ const sessionItems = (tray: { template: MenuItem[] }) =>
 	tray.template.filter(
 		(item) =>
 			typeof item.click === "function" &&
-			item.label !== "Show Agent Orchestrator" &&
-			item.label !== "Quit AO Completely",
+			item.label !== "Show Orchestrator Board" &&
+			item.label !== "Quit Orchestrator Board Completely",
 	);
 
 afterEach(() => {
@@ -84,13 +86,14 @@ describe("createTrayController", () => {
 	it("renders an empty state with no title before any session needs attention", () => {
 		const { tray } = setup();
 		expect(tray.title).toBe("");
+		expect(tray.tooltip).toBe("Orchestrator Board");
 		expect(tray.template.some((i) => i.label === "No sessions need attention" && i.enabled === false)).toBe(true);
-		expect(tray.template.some((i) => i.label === "Quit AO Completely")).toBe(true);
+		expect(tray.template.some((i) => i.label === "Quit Orchestrator Board Completely")).toBe(true);
 	});
 
 	it("hands the explicit quit action to the quitCompletely delegate", () => {
 		const { tray, quitCompletely } = setup();
-		const quit = tray.template.find((item) => item.label === "Quit AO Completely");
+		const quit = tray.template.find((item) => item.label === "Quit Orchestrator Board Completely");
 		expect(quit?.role).toBeUndefined();
 		quit?.click?.();
 		expect(quitCompletely).toHaveBeenCalledTimes(1);
@@ -98,7 +101,7 @@ describe("createTrayController", () => {
 
 	it("hands the show action to the focusWindow delegate", () => {
 		const { tray, focusWindow } = setup();
-		tray.template.find((item) => item.label === "Show Agent Orchestrator")?.click?.();
+		tray.template.find((item) => item.label === "Show Orchestrator Board")?.click?.();
 		expect(focusWindow).toHaveBeenCalledTimes(1);
 	});
 
@@ -169,7 +172,7 @@ describe("createTrayController", () => {
 		controller.setLocale("zh-CN");
 		expect(tray.tooltip).toBe("1 个会话需要关注");
 		expect(tray.template.some((i) => i.label === "需要你处理")).toBe(true);
-		expect(tray.template.some((i) => i.label === "显示 Agent Orchestrator")).toBe(true);
-		expect(tray.template.some((i) => i.label === "完全退出 AO")).toBe(true);
+		expect(tray.template.some((i) => i.label === "显示 Orchestrator Board")).toBe(true);
+		expect(tray.template.some((i) => i.label === "完全退出 Orchestrator Board")).toBe(true);
 	});
 });

@@ -1,3 +1,7 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { describe, expect, it } from "vitest";
 import {
 	refreshSlowDaemonStartupDetails,
@@ -15,7 +19,7 @@ describe("slowDaemonStartupStatus", () => {
 
 		expect(status).toMatchObject({
 			state: "starting",
-			message: "AO daemon is still starting. Session recovery can take a while.",
+			message: "Orchestrator Board daemon is still starting. Session recovery can take a while.",
 			details: "initial recovery output",
 			executablePath: "/Applications/AO.app/ao",
 			workingDirectory: "/Users/example/.ao",

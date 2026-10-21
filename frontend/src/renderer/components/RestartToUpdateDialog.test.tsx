@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -284,7 +286,7 @@ it("shows an inline failure and retries by relaunching AO", async () => {
 	await screen.findByText("Safer updates");
 	await userEvent.click(screen.getByRole("button", { name: "Restart & install" }));
 	await act(async () => install.reject(new Error("Error invoking remote method 'updates:install': Error: Couldn't finish preparing the update. Retry to try again.")));
-	expect(screen.getByRole("alert")).toHaveTextContent("AO could not prepare the update. Please try again.");
+	expect(screen.getByRole("alert")).toHaveTextContent("Orchestrator Board could not prepare the update. Please try again.");
 	expect(screen.getByRole("alert")).toHaveTextContent("Couldn't finish preparing the update. Retry to try again.");
 	expect(screen.getByRole("alert")).not.toHaveTextContent("Error invoking remote method");
 	expect(screen.getByText("Safer updates")).toBeVisible();

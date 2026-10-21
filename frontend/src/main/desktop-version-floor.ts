@@ -1,8 +1,12 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { app, dialog, shell } from "electron";
 import semver from "semver";
+import product from "../../product.json";
+import { readReleaseSource, RELEASE_REPO, RELEASES_URL, assertForkReleaseUrl } from "./release-source";
 
 const FLOOR_URL =
-  "https://raw.githubusercontent.com/Untrivial-ai/agent-orchestrator/main/desktop-version-floor.json";
+  `https://raw.githubusercontent.com/${RELEASE_REPO}/main/desktop-version-floor.json`;
 
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -13,7 +17,7 @@ type Floor = {
 };
 
 const DEFAULT_DOWNLOAD_URL =
-  "https://github.com/Untrivial-ai/agent-orchestrator/releases/latest";
+  `${RELEASES_URL}/latest`;
 
 function usableVersion(v: string | null | undefined): string | null {
   const trimmed = v?.trim();
@@ -33,8 +37,10 @@ export async function checkDesktopVersionFloor(): Promise<void> {
   if (!app.isPackaged) return;
   let floor: Floor;
   try {
+    readReleaseSource();
     const response = await fetch(FLOOR_URL, {
       cache: "no-store",
+      redirect: "error",
       headers: {
         "User-Agent": `ao-desktop/${app.getVersion()}`,
         Accept: "application/json",
@@ -43,13 +49,17 @@ export async function checkDesktopVersionFloor(): Promise<void> {
     });
     if (!response.ok) return;
     floor = (await response.json()) as Floor;
-  } catch {
+  } catch (error) {
+    console.warn("[desktop-version-floor]", error);
     return;
   }
 
   const running = app.getVersion();
-  const rawUrl = floor.downloadUrl || DEFAULT_DOWNLOAD_URL;
-  const downloadUrl = rawUrl.startsWith("https://github.com/") ? rawUrl : DEFAULT_DOWNLOAD_URL;
+  const downloadUrl = floor.downloadUrl || DEFAULT_DOWNLOAD_URL;
+  try { assertForkReleaseUrl(downloadUrl); } catch (error) {
+    console.warn("[desktop-version-floor]", error);
+    return;
+  }
   const minVersion = usableVersion(floor.min);
   const latestVersion = usableVersion(floor.latest);
 
@@ -60,7 +70,7 @@ export async function checkDesktopVersionFloor(): Promise<void> {
       defaultId: 0,
       cancelId: 1,
       title: "Update Required",
-      message: `Agent Orchestrator v${running} is no longer supported.`,
+      message: `${product.productName} v${running} is no longer supported.`,
       detail:
         `Version ${minVersion} or later is required. ` +
         "Download the latest release to continue using the app.",
@@ -80,7 +90,7 @@ export async function checkDesktopVersionFloor(): Promise<void> {
       defaultId: 0,
       cancelId: 1,
       title: "Update Available",
-      message: "A newer version of Agent Orchestrator is available.",
+      message: `A newer version of ${product.productName} is available.`,
       detail:
         `You are on v${running}. Version ${latestVersion} is recommended. ` +
         "You can update now or continue using the current version.",

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -85,11 +87,11 @@ describe("decideRelocation", () => {
 describe("installedBundlePath", () => {
 	it("maps any running bundle to the same name under /Applications", () => {
 		expect(
-			installedBundlePath("/Users/x/Downloads/Agent Orchestrator.app"),
-		).toBe("/Applications/Agent Orchestrator.app");
+			installedBundlePath("/Users/x/Downloads/Orchestrator Board.app"),
+		).toBe("/Applications/Orchestrator Board.app");
 		expect(
-			installedBundlePath("/Volumes/Agent Orchestrator/Agent Orchestrator.app"),
-		).toBe("/Applications/Agent Orchestrator.app");
+			installedBundlePath("/Volumes/Orchestrator Board/Orchestrator Board.app"),
+		).toBe("/Applications/Orchestrator Board.app");
 	});
 });
 
@@ -99,7 +101,7 @@ describe("readBundleVersion", () => {
 
 	beforeEach(async () => {
 		dir = await mkdtemp(path.join(os.tmpdir(), "ao-relocation-"));
-		bundle = path.join(dir, "Agent Orchestrator.app");
+		bundle = path.join(dir, "Orchestrator Board.app");
 		await mkdir(path.join(bundle, "Contents"), { recursive: true });
 	});
 
@@ -117,8 +119,9 @@ describe("readBundleVersion", () => {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <key>CFBundleIdentifier</key><string>com.gamasoftware.orchestrator-board</string>
     <key>CFBundleDisplayName</key>
-    <string>Agent Orchestrator</string>
+    <string>Orchestrator Board</string>
     <key>CFBundleShortVersionString</key>
     <string>0.11.2-nightly.202608050602</string>
     <key>CFBundleVersion</key>
@@ -129,6 +132,11 @@ describe("readBundleVersion", () => {
 		expect(readBundleVersion(bundle)).toBe("0.11.2-nightly.202608050602");
 	});
 
+	it("refuses the upstream identity at a fork-named destination", async () => {
+		await writePlist("<plist><dict><key>CFBundleIdentifier</key><string>dev.agent-orchestrator.desktop</string><key>CFBundleShortVersionString</key><string>0.1.0</string></dict></plist>");
+		expect(readBundleVersion(bundle)).toBeNull();
+	});
+
 	it("returns null when the key is missing", async () => {
 		await writePlist("<plist><dict></dict></plist>");
 		expect(readBundleVersion(bundle)).toBeNull();
@@ -137,4 +145,12 @@ describe("readBundleVersion", () => {
 	it("returns null when the bundle does not exist", () => {
 		expect(readBundleVersion(path.join(dir, "Nope.app"))).toBeNull();
 	});
+});
+
+	it("does not expose an upstream bundle as a relocation destination", () => {
+		expect(installedBundlePath("/Users/x/Downloads/Agent Orchestrator.app")).toBe("/Applications/Orchestrator Board.app");
+	});
+
+it.each(["/Users/x/Downloads/Agent Orchestrator.app", "/Users/x/Downloads/Renamed.app"])("keeps renamed fork bundle %s away from automatic replacement", (runningBundlePath) => {
+	expect(decideRelocation({...BASE, runningBundlePath, installedPresent: false})).toBe("stay");
 });

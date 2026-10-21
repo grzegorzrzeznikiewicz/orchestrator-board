@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DaemonStartupLoader } from "./DaemonStartupLoader";
@@ -19,7 +21,7 @@ describe("DaemonStartupLoader", () => {
 	it("shows only the mascot and announces startup to assistive tech", () => {
 		render(<DaemonStartupLoader />);
 
-		const status = screen.getByRole("status", { name: "Agent Orchestrator is starting" });
+		const status = screen.getByRole("status", { name: "Orchestrator Board is starting" });
 		expect(status.textContent).toBe("");
 		expect(status.querySelector(".ao-startup-logo")).not.toBeNull();
 	});

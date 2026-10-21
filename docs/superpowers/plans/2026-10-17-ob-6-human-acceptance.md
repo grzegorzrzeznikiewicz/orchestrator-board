@@ -1,4 +1,6 @@
 # OB-6 Human Acceptance Implementation Plan
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 

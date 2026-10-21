@@ -1,5 +1,23 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+const originalResources = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+let resources: string;
+beforeEach(() => {
+  resources = mkdtempSync(path.join(os.tmpdir(), "ob-feed-"));
+  writeFileSync(path.join(resources, "app-update.yml"), "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n");
+  Object.defineProperty(process, "resourcesPath", { configurable: true, value: resources });
+});
+afterEach(() => {
+  rmSync(resources, { recursive: true, force: true });
+  if (originalResources) Object.defineProperty(process, "resourcesPath", originalResources);
+  else Reflect.deleteProperty(process, "resourcesPath");
+});
+
 import { listFeatureBuilds, parseFeatureBuild, reconcileFeaturePin } from "./feature-builds";
 import type { UpdateSettings } from "./update-settings";
 
@@ -95,6 +113,14 @@ describe("parseFeatureBuild", () => {
 // ---------------------------------------------------------------------------
 
 describe("listFeatureBuilds", () => {
+  it.each(["missing", "foreign", "malformed"])("does not network when source config is %s", async fault => {
+    const config = path.join(resources, "app-update.yml");
+    if (fault === "missing") rmSync(config);
+    else writeFileSync(config, fault === "foreign" ? "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n" : "provider: [github");
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    expect(await listFeatureBuilds()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});

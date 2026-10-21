@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 # Node / Electron
 node_modules/
 .pnpm/
@@ -104,3 +106,6 @@ pnpm-lock.yaml
 
 # Serena MCP local project config
 .serena/
+
+# Generated per target during packaging; source notices/generator are tracked.
+frontend/resources/licenses/

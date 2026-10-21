@@ -1,0 +1,104 @@
+{
+  "@posthog/core": {
+    "file": "posthog__core.txt",
+    "source": "https://raw.githubusercontent.com/PostHog/posthog-js/d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765/LICENSE",
+    "sha256": "0a0f714f9707cb4b46bfcb609bc1789e561b9e03a35e1f36b1aa56bee3a126e6",
+    "retrieved": "2026-10-17",
+    "packageVersion": "1.35.1",
+    "registryMetadata": "https://registry.npmjs.org/%40posthog%2Fcore/1.35.1",
+    "sourceCommit": "d7b1a031761cdd6aa8cf6b28f828a2fa29ac0765",
+    "versionEvidence": "Npm registry-delivered SLSA attestation binds the lock-matched tarball SHA-512 to this commit; all 68 installed src files byte-identical. No independent attestation-signature verifier was run."
+  },
+  "@sentry/server-utils": {
+    "file": "sentry__server-utils.txt",
+    "source": "https://raw.githubusercontent.com/getsentry/sentry-javascript/0356ffd7e92f2ed8bc61fd3d7b928d1c9fd3e83f/LICENSE",
+    "sha256": "497d5a7036220d5763088d161612f9f7f2e499fe3ce186826f4369b465769312",
+    "retrieved": "2026-10-17",
+    "packageVersion": "10.70.0",
+    "registryMetadata": "https://registry.npmjs.org/%40sentry%2Fserver-utils/10.70.0",
+    "sourceCommit": "0356ffd7e92f2ed8bc61fd3d7b928d1c9fd3e83f",
+    "versionEvidence": "Official release tag 10.70.0 resolves to this commit; installed package.json byte-identical and all 121 unique installed source-map original sources match immutable Git blobs."
+  },
+  "qrcode-generator": {
+    "file": "qrcode-generator.txt",
+    "source": "https://raw.githubusercontent.com/kazuhikoarase/qrcode-generator/73b65678e76a6a196d941910dd40b87b53457e41/LICENSE",
+    "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c",
+    "retrieved": "2026-10-17",
+    "packageVersion": "1.5.2",
+    "registryMetadata": "https://registry.npmjs.org/qrcode-generator/1.5.2",
+    "gitHead": "73b65678e76a6a196d941910dd40b87b53457e41"
+  },
+  "react-remove-scroll-bar": {
+    "file": "react-remove-scroll-bar.txt",
+    "source": "https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/8ca9ba5ea52de03308fe8ced94f7b159a44d28ff/LICENSE",
+    "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84",
+    "retrieved": "2026-10-17",
+    "packageVersion": "2.3.8",
+    "registryMetadata": "https://registry.npmjs.org/react-remove-scroll-bar/2.3.8",
+    "evidenceGap": "The 2.3.8 npm archive contains no original full notice and its gitHead is unavailable. This is a later maintainer-accepted supplemental license for content-matched implementation, not a recovered historical 2.3.8 tarball notice; no original holder/year is inferred.",
+    "versionEvidence": "All 26 implementation/documentation files in the integrity-verified 2.3.7 and 2.3.8 npm archives are identical; only root package.json version/dependency range differs. Registry-named 2.3.7 source 29e9fcd1eecf7d3b77a767941c4a57fe461fc1e4 is unchanged by the maintainer-accepted LICENSE addition/merge at the source commit above."
+  },
+  "standardwebhooks": {
+    "file": "standardwebhooks.txt",
+    "source": "https://raw.githubusercontent.com/standard-webhooks/standard-webhooks/929bf0c1928b188287eaf88d0a9f0a4e87df6499/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "retrieved": "2026-10-17",
+    "packageVersion": "1.0.0",
+    "registryMetadata": "https://registry.npmjs.org/standardwebhooks/1.0.0",
+    "gitHead": "929bf0c1928b188287eaf88d0a9f0a4e87df6499"
+  },
+  "@apm-js-collab/code-transformer-bundler-plugins": {
+    "file": "apm-js-collab__code-transformer-bundler-plugins.txt",
+    "source": "installed package.json MIT declaration; standard MIT terms from installed react/LICENSE (copyright header excluded; original package attribution is retained separately)",
+    "sha256": "e73401f98d3fac62caba6eb9941c32ffed0fc113bb1b62294ae39e21b02d666b",
+    "retrieved": "2026-10-17",
+    "packageVersion": "0.7.4",
+    "gitHead": "6bf9c2800e629ed08e974cc1a8ea1f3a1775ed14",
+    "registryMetadata": "https://registry.npmjs.org/%40apm-js-collab%2Fcode-transformer-bundler-plugins/0.7.4",
+    "evidenceGap": "The exact npm archive and registry-named source declare MIT but supply no original full copyright/permission notice. Standard MIT terms are supplied separately; package author metadata is retained without inferring a copyright holder or year."
+  },
+  "get-folder-size": {
+    "file": "get-folder-size.txt",
+    "source": "installed package.json MIT declaration; standard MIT terms from installed react/LICENSE (copyright header excluded; original package attribution is retained separately)",
+    "sha256": "e73401f98d3fac62caba6eb9941c32ffed0fc113bb1b62294ae39e21b02d666b",
+    "retrieved": "2026-10-17",
+    "packageVersion": "2.0.1",
+    "gitHead": "9034cb09d474f023245ca549ea4a294a43d1a84f",
+    "registryMetadata": "https://registry.npmjs.org/get-folder-size/2.0.1",
+    "evidenceGap": "The exact npm archive and registry-named source declare MIT but supply no original full copyright/permission notice. Standard MIT terms are supplied separately; package author metadata is retained without inferring a copyright holder or year."
+  },
+  "lazy-val": {
+    "file": "lazy-val.txt",
+    "source": "https://raw.githubusercontent.com/electron-userland/electron-builder/ac5697c377c031ae5999ff3e15a6634fb953eece/LICENSE",
+    "sha256": "bed8d0ab3e6031817f775a641ff37313b0f5591bc8ba0ed79b978dafbd4231ce",
+    "retrieved": "2026-10-20",
+    "packageVersion": "1.0.5",
+    "gitHead": "b69ad4119f1b19bdab13c61ee2fcc88d46b89071",
+    "registryMetadata": "https://registry.npmjs.org/lazy-val/1.0.5",
+    "evidenceGap": "This is the recovered original MIT notice for inherited implementation, not a standalone notice supplied by lazy-val 1.0.5. The package declares MIT; no separate copyright notice for subsequent changes was supplied, and no holder or year is inferred.",
+    "sourceCommit": "ac5697c377c031ae5999ff3e15a6634fb953eece",
+    "sourcePath": "packages/electron-builder-http/src/httpExecutor.ts",
+    "extractionCommit": "165e11c6f7d6ea4be589a39823caa50c71b78928",
+    "versionEvidence": "Initial lazy-val 6a34c8a7d7dfb761db07a156564bdc63af4c6632 exactly matches the original electron-builder Lazy implementation after moving its constructor. The extraction commit deletes that class and imports lazy-val. Exact 1.0.5 source matches sourcesContent from the lock/registry SHA-512-verified tarball; subsequent source differences are recorded in the retained research evidence."
+  },
+  "tiny-each-async": {
+    "file": "tiny-each-async.txt",
+    "source": "installed package.json MIT declaration; standard MIT terms from installed react/LICENSE (copyright header excluded; original package attribution is retained separately)",
+    "sha256": "e73401f98d3fac62caba6eb9941c32ffed0fc113bb1b62294ae39e21b02d666b",
+    "retrieved": "2026-10-17",
+    "packageVersion": "2.0.3",
+    "gitHead": "0e1dc5f28868088f56c9c77833388f6e1b72b9c4",
+    "registryMetadata": "https://registry.npmjs.org/tiny-each-async/2.0.3",
+    "evidenceGap": "The exact npm archive and registry-named source declare MIT but supply no original full copyright/permission notice. Standard MIT terms are supplied separately; package author metadata is retained without inferring a copyright holder or year."
+  },
+  "tmp-promise": {
+    "file": "tmp-promise.txt",
+    "source": "installed package.json MIT declaration; standard MIT terms from installed react/LICENSE (copyright header excluded; original package attribution is retained separately)",
+    "sha256": "e73401f98d3fac62caba6eb9941c32ffed0fc113bb1b62294ae39e21b02d666b",
+    "retrieved": "2026-10-17",
+    "packageVersion": "3.0.3",
+    "gitHead": "7a9d92612d24791664669596c2705313d459ce7f",
+    "registryMetadata": "https://registry.npmjs.org/tmp-promise/3.0.3",
+    "evidenceGap": "The exact npm archive and registry-named source declare MIT but supply no original full copyright/permission notice. Standard MIT terms are supplied separately; package author metadata is retained without inferring a copyright holder or year."
+  }
+}

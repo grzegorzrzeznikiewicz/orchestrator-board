@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
 import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -24,13 +26,13 @@ beforeEach(async () => {
 });
 afterEach(async () => { vi.useRealTimers(); await rm(root, { recursive: true, force: true }); });
 
-const appPath = "/Applications/Agent Orchestrator.app";
+const appPath = "/Applications/Orchestrator Board.app";
 function start() {
 	return startMacUpdateProgress({ stateDir: root, resourcesPath: path.join(root, "resources"), appPath, version: "2.0.0" });
 }
 async function attemptPath() {
-	const active = JSON.parse(await readFile(path.join(root, "update-restart", "active.json"), "utf8"));
-	return path.join(root, "update-restart", active.attempt);
+	const active = JSON.parse(await readFile(path.join(root, "orchestrator-board-update-restart", "active.json"), "utf8"));
+	return path.join(root, "orchestrator-board-update-restart", active.attempt);
 }
 
 it("copies signed bytes outside the app and waits for its detached window before handing off", async () => {
@@ -47,7 +49,7 @@ it("rejects helper startup failure so AO can stay open", async () => {
 	spawn.mockImplementation(() => { queueMicrotask(() => child.emit("error", new Error("not signed"))); return child; });
 	await expect(start()).rejects.toThrow("not signed");
 	expect(child.kill).toHaveBeenCalledOnce();
-	await expect(readFile(path.join(root, "update-restart", "active.json"))).rejects.toThrow();
+	await expect(readFile(path.join(root, "orchestrator-board-update-restart", "active.json"))).rejects.toThrow();
 });
 
 it("acknowledges only the new process running the expected version and bundle", async () => {
@@ -55,7 +57,7 @@ it("acknowledges only the new process running the expected version and bundle", 
 	const options = { stateDir: root, appPath, version: "2.0.0", pid: process.pid + 1 };
 	expect(await acknowledgeMacUpdateRestart({ ...options, pid: process.pid })).toBe(false);
 	expect(await acknowledgeMacUpdateRestart({ ...options, version: "1.0.0" })).toBe(false);
-	expect(await acknowledgeMacUpdateRestart({ ...options, appPath: "/Downloads/Agent Orchestrator.app" })).toBe(false);
+	expect(await acknowledgeMacUpdateRestart({ ...options, appPath: "/Downloads/Orchestrator Board.app" })).toBe(false);
 	expect(await acknowledgeMacUpdateRestart(options)).toBe(true);
 	const complete = JSON.parse(await readFile(path.join(await attemptPath(), "complete.json"), "utf8"));
 	expect(complete).toMatchObject({ version: "2.0.0", appPath, pid: process.pid + 1, parentPID: process.pid });
@@ -66,8 +68,16 @@ it("ignores old, future and malformed attempts without preventing app startup", 
 	const options = { stateDir: root, appPath, version: "2.0.0", pid: process.pid + 1 };
 	expect(await acknowledgeMacUpdateRestart({ ...options, now: Date.now() + 31 * 60_000 })).toBe(false);
 	expect(await acknowledgeMacUpdateRestart({ ...options, now: 0 })).toBe(false);
-	await writeFile(path.join(root, "update-restart", "active.json"), '{"attempt":"../../elsewhere"}');
+	await writeFile(path.join(root, "orchestrator-board-update-restart", "active.json"), '{"attempt":"../../elsewhere"}');
 	expect(await acknowledgeMacUpdateRestart(options)).toBe(false);
-	await writeFile(path.join(root, "update-restart", "active.json"), 'broken');
+	await writeFile(path.join(root, "orchestrator-board-update-restart", "active.json"), 'broken');
 	expect(await acknowledgeMacUpdateRestart(options)).toBe(false);
+});
+
+it("preserves original application restart metadata", async () => {
+	const legacy = path.join(root, "update-restart", "active.json");
+	await mkdir(path.dirname(legacy));
+	await writeFile(legacy, "original application restart metadata");
+	await start();
+	expect(await readFile(legacy, "utf8")).toBe("original application restart metadata");
 });

@@ -1,6 +1,11 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "../stores/ui-store";
+import { aoBridge } from "../lib/bridge";
 import {
 	STANDALONE_PROJECT_KIND,
 	STANDALONE_WORKSPACE_ID,
@@ -96,6 +101,18 @@ beforeEach(() => {
 });
 
 describe("shell index route", () => {
+	it("opens the fork repository when Star Us is clicked", () => {
+		const openExternal = vi.spyOn(aoBridge.app, "openExternal").mockResolvedValue(undefined);
+		try {
+			render(<HomePage />);
+			fireEvent.click(screen.getByRole("button", { name: "Star Us" }));
+			expect(openExternal).toHaveBeenCalledTimes(1);
+			expect(openExternal).toHaveBeenCalledWith("https://github.com/grzegorzrzeznikiewicz/orchestrator-board");
+		} finally {
+			openExternal.mockRestore();
+		}
+	});
+
 	it("shows the home actions when no projects exist", () => {
 		render(<HomePage />);
 

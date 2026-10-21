@@ -1,8 +1,11 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { createHash, createPublicKey, verify } from "node:crypto";
 import semver from "semver";
+import product from "../../product.json";
 
 export const MAC_V2_METADATA = "ao-diff-v2-mac.json";
-export const MAC_V2_REPOSITORY = "Untrivial-ai/agent-orchestrator";
+export const MAC_V2_REPOSITORY = product.releaseRepo;
 export const MAC_V2_MAX_METADATA = 256 * 1024;
 export const MAC_V2_MAX_MAP = 8 * 1024 * 1024;
 export type MacV2Arch = "arm64" | "x64";

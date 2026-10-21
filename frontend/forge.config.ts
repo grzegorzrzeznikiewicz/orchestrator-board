@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -7,30 +9,20 @@ import MakerNSIS from "./makers/maker-nsis";
 import MakerDMG, { isSigningConfigured, sealDmg, verifyDmg, verifyMacArtifact } from "./makers/maker-dmg";
 import { machoHasX86_64Slice } from "./makers/macho-archs";
 import MakerAppImage from "./makers/maker-appimage";
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BUNDLED_TMUX_VERSION } from "./scripts/tmux-version.mjs";
 
-// Default GitHub release target (production). Releases land on Untrivial-ai
-// (the org the repo was transferred to in July 2026; AgentWrapper and aoagents
-// are prior homes). Builds cut by CI must NOT rely on this fallback: the
-// workflows set AO_RELEASE_REPO to the repo they run in, and build-artifacts.yml
-// asserts the baked app-update.yml matches it, so a future org/repo rename
-// fails the build instead of stranding the fleet on a redirect (#3523).
-const DEFAULT_RELEASE_REPO = "Untrivial-ai/agent-orchestrator";
+import product from "./product.json";
 
-// The packaged binary name (no extension). Single source of truth: the packager
-// names the exe/ELF from this, and the NSIS + deb makers must point their
-// shortcut/launcher at the SAME name. Drift here means a broken Start menu
-// shortcut on Windows (#2414) or "could not find the Electron app binary" on deb.
-const EXECUTABLE_NAME = "agent-orchestrator";
+const EXECUTABLE_NAME = product.executableName;
 const AUTH_PROTOCOL = {
-	name: "Agent Orchestrator authentication callback",
-	schemes: ["ao-app"],
+	name: `${product.productName} authentication callback`,
+	schemes: [product.authProtocol],
 };
-const AUTH_PROTOCOL_MIME_TYPE = "x-scheme-handler/ao-app";
+const AUTH_PROTOCOL_MIME_TYPE = `x-scheme-handler/${product.authProtocol}`;
 const PACKAGED_EXTERNAL_DEPENDENCIES = [
 	"/node_modules/better-sqlite3",
 	"/node_modules/bindings",
@@ -65,6 +57,7 @@ export function extraResourcesForPlatform(platform: NodeJS.Platform): string[] {
 		"daemon",
 		"agent-browser",
 		"resources/acp-runtime",
+		"resources/licenses",
 		...(platform === "darwin" ? ["update-helper"] : []),
 		...(platform === "darwin" || platform === "linux" ? ["tmux"] : []),
 		"assets/icon.png",
@@ -103,16 +96,37 @@ export function macSignOptionsForFile(filePath: string): { entitlements?: string
 	return machoHasX86_64Slice(filePath) ? { entitlements: ACP_RUNTIME_NODE_ENTITLEMENTS } : {};
 }
 
-// parseReleaseRepo turns an "owner/repo" string (from AO_RELEASE_REPO) into the
-// publisher-github { owner, name } shape, falling back to the production default
-// when unset or malformed.
+// A build may repeat the known fork target, but must never silently publish or
+// bake a feed for a foreign repository (including a malformed environment value).
 function parseReleaseRepo(value: string | undefined): { owner: string; name: string } {
-	const [owner, name] = (value || DEFAULT_RELEASE_REPO).split("/");
-	if (!owner || !name) {
-		const [defOwner, defName] = DEFAULT_RELEASE_REPO.split("/");
-		return { owner: defOwner, name: defName };
+	const repo = value === undefined ? product.releaseRepo : value;
+	if (repo !== product.releaseRepo || !/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repo)) {
+		throw new Error(`AO_RELEASE_REPO must be ${product.releaseRepo}`);
 	}
+	const [owner, name] = repo.split("/");
 	return { owner, name };
+}
+
+export function buildReleaseFeed(value: string | undefined): string {
+	const { owner, name } = parseReleaseRepo(value);
+	return [
+		"provider: github",
+		`owner: ${owner}`,
+		`repo: ${name}`,
+		`updaterCacheDirName: ${product.updaterCacheDirName}`,
+		"",
+	].join("\n");
+}
+
+export function verifyPackagedProductResources(resourcesPath: string): void {
+	const feed = readFileSync(path.join(resourcesPath, "app-update.yml"), "utf8");
+	if (feed !== buildReleaseFeed(undefined)) throw new Error("packaged update feed does not match this fork");
+	for (const file of ["LICENSE", "NOTICE", "THIRD-PARTY-LICENSES.txt", "ASSET-NOTICES.txt"]) {
+		const license = path.join(resourcesPath, "licenses", file);
+		if (!existsSync(license) || !readFileSync(license, "utf8").trim()) {
+			throw new Error(`packaged license missing or empty: ${file}`);
+		}
+	}
 }
 
 const config: ForgeConfig = {
@@ -123,8 +137,17 @@ const config: ForgeConfig = {
 		// runtime dependency tree explicitly; AutoUnpackNativesPlugin then places
 		// the .node binary outside app.asar.
 		ignore: ignoreFromVitePackage,
-		appBundleId: "dev.agent-orchestrator.desktop",
-		name: "Agent Orchestrator",
+		// Packager applies executableName to CFBundleDisplayName after extendInfo.
+		// This hook runs after that rewrite, before macOS signing/notarization.
+		afterCopyExtraResources: [(buildPath, _electronVersion, platform, _arch, done) => {
+			if (platform !== "darwin") { done(); return; }
+			const info = path.join(buildPath, `${product.productName}.app`, "Contents", "Info.plist");
+			const result = spawnSync("/usr/bin/plutil", ["-replace", "CFBundleDisplayName", "-string", product.productName, info], { encoding: "utf8", timeout: 5_000 });
+			done(result.error ?? (result.status === 0 ? undefined : new Error(`Could not set product display name before signing: ${result.stderr || result.signal || result.status}`)));
+		}],
+
+		appBundleId: product.appId,
+		name: product.productName,
 		executableName: EXECUTABLE_NAME,
 		protocols: [AUTH_PROTOCOL],
 		appCategoryType: "public.app-category.developer-tools",
@@ -168,20 +191,13 @@ const config: ForgeConfig = {
 		// and macOS reports the app as "damaged". owner/repo are baked from
 		// AO_RELEASE_REPO at build time.
 		prePackage: async (_forgeConfig, platform, arch) => {
+			const yml = buildReleaseFeed(process.env.AO_RELEASE_REPO);
 			await prepareNativeDependencies(platform as NodeJS.Platform, arch);
 			if (platform === "darwin") {
 				const helperBuild = spawnSync(process.execPath, [path.resolve("scripts/build-update-helper.mjs"), "--arch", arch], { stdio: "inherit" });
 				if (helperBuild.error) throw helperBuild.error;
 				if (helperBuild.status !== 0) throw new Error("macOS update helper build failed");
 			}
-			const { owner, name } = parseReleaseRepo(process.env.AO_RELEASE_REPO);
-			const yml = [
-				"provider: github",
-				`owner: ${owner}`,
-				`repo: ${name}`,
-				"updaterCacheDirName: agent-orchestrator-updater",
-				"",
-			].join("\n");
 			writeFileSync("app-update.yml", yml);
 		},
 		packageAfterPrune: async (_forgeConfig, buildPath) => {
@@ -201,7 +217,6 @@ const config: ForgeConfig = {
 		// pipeline. A source build succeeding is not enough: a missing extraResource
 		// would otherwise publish an app that silently fell back to machine tmux.
 		postPackage: async (_forgeConfig, packageResult) => {
-			if (packageResult.platform !== "darwin" && packageResult.platform !== "linux") return;
 			for (const outputPath of packageResult.outputPaths) {
 				let resourcesPath = path.join(outputPath, "resources");
 				if (packageResult.platform === "darwin") {
@@ -211,6 +226,8 @@ const config: ForgeConfig = {
 					const helper = path.join(resourcesPath, "update-helper", "ao-update-progress");
 					if (!existsSync(helper)) throw new Error(`packaged macOS update helper missing from ${helper}`);
 				}
+				verifyPackagedProductResources(resourcesPath);
+				if (packageResult.platform !== "darwin" && packageResult.platform !== "linux") continue;
 				const binary = path.join(resourcesPath, "tmux", "bin", "tmux");
 				if (!existsSync(binary)) throw new Error(`packaged tmux missing from ${binary}`);
 				const version = spawnSync(binary, ["-V"], { encoding: "utf8" });
@@ -281,17 +298,17 @@ const config: ForgeConfig = {
 		// custom install dir or proper uninstaller (issue #401).
 		new MakerNSIS(
 			{
-				appId: "dev.agent-orchestrator.desktop",
+				appId: product.appId,
 				// The name shown in the installer, the updater, the shortcuts, and
 				// Windows Apps. It matches the app's display name in main.ts.
-				productName: "Orchestrator.inc",
+				productName: product.productName,
 				// Match the packaged binary name so the Start menu shortcut targets
-				// the real "agent-orchestrator.exe" (not "Agent Orchestrator.exe").
+				// the real "orchestrator-board.exe" (not "Orchestrator Board.exe").
 				executableName: EXECUTABLE_NAME,
 				icon: "assets/icon.ico",
 				// Keep the installer filename unchanged. electron-builder names it
 				// after productName by default.
-				nsis: { artifactName: "Agent Orchestrator Setup ${version}.${ext}" },
+				nsis: { artifactName: "Orchestrator Board Setup ${version}.${ext}" },
 			},
 			["win32"],
 		),
@@ -305,8 +322,9 @@ const config: ForgeConfig = {
 		// break the signature seal on the way in (see makers/maker-dmg.ts, #3267).
 		new MakerDMG(
 			{
-				appId: "dev.agent-orchestrator.desktop",
-				productName: "Agent Orchestrator",
+				appId: product.appId,
+				productName: product.productName,
+				dmg: { icon: path.resolve("assets/icon.icns") },
 			},
 			["darwin"],
 		),
@@ -316,8 +334,9 @@ const config: ForgeConfig = {
 		// prefer a system package.
 		new MakerAppImage(
 			{
-				appId: "dev.agent-orchestrator.desktop",
-				productName: "Agent Orchestrator",
+				appId: product.appId,
+				productName: product.productName,
+				executableName: EXECUTABLE_NAME,
 				icon: "assets/icon.png",
 				protocols: [AUTH_PROTOCOL],
 			},
@@ -329,11 +348,11 @@ const config: ForgeConfig = {
 				options: {
 					// Must match packagerConfig.executableName, or the deb maker
 					// looks for the package name and fails with "could not find
-					// the Electron app binary". (Both are "agent-orchestrator".)
+					// the Electron app binary". (Both are "orchestrator-board".)
 					bin: EXECUTABLE_NAME,
 					icon: "assets/icon.png",
-					maintainer: "Agent Orchestrator",
-					homepage: "https://github.com/aoagents/agent-orchestrator",
+					maintainer: "Orchestrator Board",
+					homepage: product.sourceUrl,
 					mimeType: [AUTH_PROTOCOL_MIME_TYPE],
 				},
 			},
@@ -344,8 +363,8 @@ const config: ForgeConfig = {
 				options: {
 					icon: "assets/icon.png",
 					// rpmbuild rejects a spec with an empty License field.
-					license: "MIT",
-					homepage: "https://github.com/aoagents/agent-orchestrator",
+					license: "Apache-2.0",
+					homepage: product.sourceUrl,
 					mimeType: [AUTH_PROTOCOL_MIME_TYPE],
 				},
 			},
@@ -354,13 +373,7 @@ const config: ForgeConfig = {
 	publishers: [
 		{
 			name: "@electron-forge/publisher-github",
-			// Release target is build-time overridable so a fork run publishes to the
-			// fork without a source edit. AO_RELEASE_REPO is "owner/repo"; it defaults
-			// to the production target. The dev/test loop sets
-			// AO_RELEASE_REPO=harshitsinghbhandari/agent-orchestrator (spec §1.1, §8).
-			// Note: aoagents/agent-orchestrator and AgentWrapper/agent-orchestrator
-			// are prior homes and intentionally NOT the default; releases land on
-			// Untrivial-ai.
+			// Publisher and bundled updater share the same validated fork.
 			config: {
 				repository: parseReleaseRepo(process.env.AO_RELEASE_REPO),
 				prerelease: process.env.AO_RELEASE_PRERELEASE === "true",

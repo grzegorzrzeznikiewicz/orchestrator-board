@@ -1,4 +1,6 @@
 # OB-2 — raport odbioru
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Data: 2026-10-15. Zadanie: [OB-2](https://gamasoftware.atlassian.net/browse/OB-2).
 

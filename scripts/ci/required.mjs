@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { areas } from "./changes.mjs";

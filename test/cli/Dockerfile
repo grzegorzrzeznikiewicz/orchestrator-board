@@ -1,3 +1,5 @@
+# Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 # End-to-end CLI smoke test, modelling "install ao on a fresh machine, then use it".
 #
 # Build context is the REPO ROOT:
@@ -11,7 +13,8 @@
 # ---- stage 1: build the binary (the "release" a user would download) ----
 ARG GO_IMAGE=golang:1.27.1-bookworm
 ARG RUNTIME_IMAGE=debian:bookworm-slim
-FROM ${GO_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
+ARG TARGETARCH
 WORKDIR /src
 
 # Cache modules first.
@@ -20,13 +23,11 @@ RUN cd backend && go mod download
 
 COPY backend ./backend
 # Pure-Go SQLite (modernc) builds fine with CGO disabled -> a static binary.
-# Build against a release repo with NO published assets so `ao start` reaches the
-# fetch path and fails cleanly (404) on a fresh box. The real AgentWrapper repo
-# now publishes a linux-x64 AppImage, so an unpinned binary would download it and
-# exit 0, defeating the fresh-install assertion below. See install-check.sh.
-RUN cd backend && CGO_ENABLED=0 go build -trimpath \
-      -ldflags "-X github.com/aoagents/agent-orchestrator/backend/internal/cli.releaseRepo=AgentWrapper/ao-fresh-install-fixture" \
-      -o /out/ao ./cmd/ao
+# Build the normal product binary with its pinned fork repository. Networking
+# is controlled by the test-only proxy at runtime, never by a production override.
+RUN cd backend && CGO_ENABLED=0 GOARCH="$TARGETARCH" go build -trimpath -p 2 -o /out/ao ./cmd/ao
+COPY test/cli/proxy ./test/cli/proxy
+RUN CGO_ENABLED=0 GOARCH="$TARGETARCH" go build -trimpath -p 2 -o /out/ao-test-proxy ./test/cli/proxy/main.go
 
 # ---- stage 2: a clean machine with NO Go toolchain, just like an end user ----
 FROM ${RUNTIME_IMAGE} AS run
@@ -40,6 +41,7 @@ RUN apt-get update \
 
 # "Install" the CLI the way a user would: drop the binary on PATH.
 COPY --from=build /out/ao /usr/local/bin/ao
+COPY --from=build /out/ao-test-proxy /usr/local/bin/ao-test-proxy
 COPY test/cli/install-check.sh /usr/local/bin/ao-install-check.sh
 RUN chmod +x /usr/local/bin/ao /usr/local/bin/ao-install-check.sh
 

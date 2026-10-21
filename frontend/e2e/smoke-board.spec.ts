@@ -1,5 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { expect, test } from "@playwright/test";
 import { installFakeAgent } from "./support/fake-bridge";
+import type { WorkspaceSummary } from "../src/renderer/types/workspace";
 
 // BRD-* RENDERER SMOKE (issue #2483, renderer slice). dev:web + fake bridge —
 // does NOT hit the real daemon/storage/API/preload/PTY/FS. Those boundaries are
@@ -83,4 +86,54 @@ test("renderer: narrow card status truncates without overlapping metadata @BRD",
 	expect(usageBox).not.toBeNull();
 	expect(Math.abs(usageBox!.y - statusBox!.y)).toBeLessThan(2);
 	expect(statusBox!.x + statusBox!.width).toBeLessThanOrEqual(usageBox!.x);
+});
+
+// Real CSS geometry regression: the health banner must consume its own height
+// instead of pushing the board's horizontal scrollbar outside the clipped pane.
+// The existing renderer harness fakes daemon/preload state; this covers layout,
+// while native acceptance still verifies the packaged app separately.
+test("renderer: local Kanban scrollbar stays reachable below the orchestrator warning @P0 @BRD", async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await installFakeAgent(page, { workers: [{ id: "local-worker", title: "Local task" }] });
+	await page.addInitScript(() => {
+		const fake = window.__aoFakeAgent!;
+		const snapshot = fake.snapshot;
+		fake.snapshot = () => (snapshot() as WorkspaceSummary[]).map((workspace) => ({
+			...workspace,
+			reviewMode: "local",
+			sessions: workspace.sessions.filter((session) => session.kind !== "orchestrator"),
+		}));
+	});
+	await page.route("**/api/v1/sessions/*/local-workflow", (route) => route.fulfill({
+		contentType: "application/json",
+		body: JSON.stringify({
+			run: null, stage: "executing", current: false, accepted: false,
+			decisions: [], operations: [], requiredFindings: [], reviews: [], tests: [],
+		}),
+	}));
+	await page.goto("/#/projects/fake-proj");
+	const board = page.getByTestId("board");
+	await expect(board.getByText("No orchestrator is running for this project.")).toBeVisible();
+	const localBoard = board.locator('section[aria-label="Local workflow"]');
+	await expect(localBoard.locator("[data-column]")).toHaveCount(6);
+	const scroller = localBoard.locator(".board-horizontal-scrollbar");
+	await expect(scroller).toBeVisible();
+
+	const geometry = await scroller.evaluate((element) => {
+		const bounds = element.getBoundingClientRect();
+		const boardBounds = element.closest('[data-testid="board"]')!.getBoundingClientRect();
+		return {
+			scrollerBottom: bounds.bottom,
+			boardBottom: boardBounds.bottom,
+			viewportBottom: window.innerHeight,
+			clientWidth: element.clientWidth,
+			scrollWidth: element.scrollWidth,
+		};
+	});
+	expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+	expect(geometry.scrollerBottom).toBeLessThanOrEqual(geometry.boardBottom + 1);
+	expect(geometry.scrollerBottom).toBeLessThanOrEqual(geometry.viewportBottom);
+
+	await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+	await expect(localBoard.locator('[data-column="accepted"]')).toBeInViewport();
 });

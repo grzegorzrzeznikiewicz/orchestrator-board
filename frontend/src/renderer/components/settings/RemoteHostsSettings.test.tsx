@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -85,7 +87,7 @@ it("explains an incompatible host without adding it", async () => {
 	fireEvent.change(screen.getByRole("textbox", { name: "Address" }), { target: { value: "http://box-a:3001" } });
 	fireEvent.change(screen.getByLabelText("Connection password"), { target: { value: "secret123" } });
 	fireEvent.click(screen.getByRole("button", { name: "Add host" }));
-	await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Update AO"));
+	await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Update Orchestrator Board"));
 	expect(saved.entries).toEqual([]);
 });
 

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -10,13 +12,13 @@ import { assertSentinelCapable, launchEnv, parseArgs, removeRunFile, seedUpdateS
 // time rather than half-run an update test and report a confusing timeout.
 
 describe("e2e-mac-update parseArgs", () => {
-	const required = ["--app", "/Applications/Agent Orchestrator.app", "--expect-version", "0.10.4"];
+	const required = ["--app", "/Applications/Orchestrator Board.app", "--expect-version", "0.10.4"];
 
 	it("parses the required flags and defaults the state dir to ~/.ao", () => {
 		const opts = parseArgs(required);
-		expect(opts.app).toBe("/Applications/Agent Orchestrator.app");
+		expect(opts.app).toBe("/Applications/Orchestrator Board.app");
 		expect(opts.expectVersion).toBe("0.10.4");
-		expect(opts.appName).toBe("Agent Orchestrator");
+		expect(opts.appName).toBe("Orchestrator Board");
 		// All app state lives under ~/.ao only (see AGENTS.md hard rules).
 		expect(opts.stateDir).toBe(join(homedir(), ".ao"));
 		expect(opts.runFile).toBe(join(homedir(), ".ao", "running.json"));
@@ -99,7 +101,7 @@ describe("e2e-mac-update parseArgs", () => {
 describe("e2e-mac-update launch environment", () => {
 	const opts = parseArgs([
 		"--app",
-		"/Applications/Agent Orchestrator.app",
+		"/Applications/Orchestrator Board.app",
 		"--expect-version",
 		"0.10.4",
 		"--state-dir",
@@ -120,7 +122,7 @@ describe("e2e-mac-update launch environment", () => {
 		try {
 			const moved = parseArgs([
 				"--app",
-				"/Applications/Agent Orchestrator.app",
+				"/Applications/Orchestrator Board.app",
 				"--expect-version",
 				"0.10.4",
 				"--run-file",

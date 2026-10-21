@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { describe, expect, it } from "vitest";
 import { appI18n } from "../i18n";
 import type { PullRequestFacts, WorkspaceSession } from "../types/workspace";

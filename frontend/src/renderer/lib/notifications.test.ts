@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeSseRetryDelayMs } from "./sse-backoff";
@@ -582,6 +584,93 @@ describe("createNotificationsTransport", () => {
 			type: "needs_input",
 			watched: false,
 		});
+	});
+
+	it("shows a live create once when its unread snapshot arrived before the event", () => {
+		const qc = queryClient();
+		const item = notification({ id: "snapshot-ahead" });
+		for (const queryKey of [unreadNotificationsQueryKey, recentNotificationsQueryKey] as const) {
+			qc.setQueryData<NotificationsCache>(queryKey, {
+				pageParams: [""],
+				pages: [{ notifications: [item], unreadCount: 1, unresolvedCount: 1 }],
+			});
+		}
+		createNotificationsTransport(qc).connect();
+		expect(showNotificationMock).not.toHaveBeenCalled();
+
+		EventSourceStub.instances[0].dispatch("notification_created", item);
+		EventSourceStub.instances[0].dispatch("notification_created", item);
+
+		expect(showNotificationMock).toHaveBeenCalledTimes(1);
+		expect(showNotificationMock).toHaveBeenCalledWith(expect.objectContaining({ id: "snapshot-ahead" }));
+		expect(getCachedUnreadCount(qc.getQueryData<NotificationsCache>(unreadNotificationsQueryKey))).toBe(1);
+	});
+
+	it("shows a buffered live create once when the refreshed snapshot already contains it", async () => {
+		const qc = queryClient();
+		let finishRefresh: (() => void) | undefined;
+		const refresh = new Promise<void>((resolve) => { finishRefresh = resolve; });
+		vi.spyOn(qc, "invalidateQueries").mockReturnValue(refresh);
+		createNotificationsTransport(qc).connect();
+		const reconciliation = reconcileNotifications(qc);
+		const item = notification({ id: "buffered-snapshot-ahead" });
+		EventSourceStub.instances[0].dispatch("notification_created", item);
+		for (const queryKey of [unreadNotificationsQueryKey, recentNotificationsQueryKey] as const) {
+			qc.setQueryData<NotificationsCache>(queryKey, {
+				pageParams: [""],
+				pages: [{ notifications: [item], unreadCount: 1, unresolvedCount: 1 }],
+			});
+		}
+		finishRefresh?.();
+		await reconciliation;
+		EventSourceStub.instances[0].dispatch("notification_created", item);
+
+		expect(showNotificationMock).toHaveBeenCalledTimes(1);
+		expect(showNotificationMock).toHaveBeenCalledWith(expect.objectContaining({ id: "buffered-snapshot-ahead" }));
+	});
+
+	it.each([
+		{ status: "read" as const },
+		{ resolvedAt: "2026-06-16T11:00:00Z" },
+	])("does not signal a delayed create superseded by snapshot $status $resolvedAt", (superseding) => {
+		const qc = queryClient();
+		const current = notification(superseding);
+		for (const queryKey of [unreadNotificationsQueryKey, recentNotificationsQueryKey] as const) {
+			qc.setQueryData<NotificationsCache>(queryKey, {
+				pageParams: [""],
+				pages: [{ notifications: queryKey === unreadNotificationsQueryKey && current.status === "read" ? [] : [current], unreadCount: Number(current.status === "unread"), unresolvedCount: 0 }],
+			});
+		}
+		createNotificationsTransport(qc).connect();
+		EventSourceStub.instances[0].dispatch("notification_created", notification());
+
+		expect(showNotificationMock).not.toHaveBeenCalled();
+		expect(getCachedNotifications(qc.getQueryData<NotificationsCache>(recentNotificationsQueryKey))).toEqual([current]);
+	});
+
+	it.each([false, true])("does not signal a delayed create after deletion (confirmed=$confirmed)", (confirmed) => {
+		const qc = queryClient();
+		const item = notification();
+		mergeUnreadNotification(qc, item);
+		applyOptimisticNotificationDelete(qc, item);
+		if (confirmed) applyNotificationDeleted(qc, item);
+		createNotificationsTransport(qc).connect();
+		EventSourceStub.instances[0].dispatch("notification_created", item);
+
+		expect(showNotificationMock).not.toHaveBeenCalled();
+		expect(getCachedNotifications(qc.getQueryData<NotificationsCache>(unreadNotificationsQueryKey))).toEqual([]);
+	});
+
+	it("does not repeat a delivered live notification after its caches were cleared", async () => {
+		const qc = queryClient();
+		createNotificationsTransport(qc).connect();
+		const source = EventSourceStub.instances[0];
+		source.dispatch("notification_created", notification());
+		source.dispatch("notification_cleared", { clearId: "clear-1", clearEpoch: "epoch-1", clearSequence: 1 });
+		await vi.waitFor(() => expect(getCachedNotifications(qc.getQueryData<NotificationsCache>(unreadNotificationsQueryKey))).toEqual([]));
+		source.dispatch("notification_created", notification());
+
+		expect(showNotificationMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("patches resolvedAt on live unread/all caches when AO closes the issue", () => {

@@ -1,4 +1,6 @@
 # OB-7 — regresja lokalnego workflow
+<!-- Modified for Orchestrator Board by Gama Software, 2026 (OB-1). -->
+
 
 Status na 17.10.2026: lokalne testy, analiza statyczna, odbiór manualny i niezależny review zaliczone; zdalny CI wymaga sprawdzenia po publikacji commita. Baza main `cc3bdffd63cf74291f8ad3bb550cf8beb35ea5a0`, branch `feature/OB-7`.
 

@@ -1,36 +1,11 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { app } from "electron";
 import type { UpdateSettings } from "./update-settings";
+import { readReleaseSource } from "./release-source";
 
 const GITHUB_API = "https://api.github.com";
-
-// Default when the baked app-update.yml cannot be read (dev, or a malformed
-// bundle). Matches forge.config.ts DEFAULT_RELEASE_REPO.
-const DEFAULT_REPO = { owner: "Untrivial-ai", repo: "agent-orchestrator" } as const;
-
-// Resolve the GitHub repo the app updates from by reading the same bundled
-// app-update.yml that electron-updater uses. Both are baked from AO_RELEASE_REPO
-// at build time, so this keeps the feature list and the updater on the SAME repo
-// (a fork build lists that fork's feature releases, not Untrivial-ai's). The
-// list and the updater must never diverge, or the picker would offer builds
-// the updater cannot install.
-let cachedRepo: { owner: string; repo: string } | undefined;
-function resolveRepo(): { owner: string; repo: string } {
-	if (cachedRepo) return cachedRepo;
-	cachedRepo = { ...DEFAULT_REPO };
-	try {
-		if (app.isPackaged) {
-			const yml = readFileSync(path.join(process.resourcesPath, "app-update.yml"), "utf8");
-			const owner = /^owner:\s*(.+)$/m.exec(yml)?.[1]?.trim();
-			const repo = /^repo:\s*(.+)$/m.exec(yml)?.[1]?.trim();
-			if (owner && repo) cachedRepo = { owner, repo };
-		}
-	} catch {
-		// Keep the default on any read/parse failure.
-	}
-	return cachedRepo;
-}
+const resolveRepo = readReleaseSource;
 
 // Marker embedded in feature-build release bodies by the CI workflow.
 const FEATURE_BUILD_MARKER = "<!-- ao-feature-build:";
@@ -102,6 +77,7 @@ function parseMarker(body: string): MarkerPayload | null {
 
 async function fetchJson<T>(url: string): Promise<T> {
 	const res = await fetch(url, {
+		redirect: "error",
 		headers: {
 			Accept: "application/vnd.github+json",
 			"X-GitHub-Api-Version": "2022-11-28",

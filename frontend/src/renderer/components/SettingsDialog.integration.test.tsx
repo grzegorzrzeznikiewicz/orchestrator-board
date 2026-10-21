@@ -52,7 +52,8 @@ async function openAgentManagement(label: string) {
 	await userEvent.click(await screen.findByLabelText(label));
 	const action = screen.queryByRole("menuitem", { name: /^Manage agents(?:…)?$/ }) ?? screen.getByRole("option", { name: /^Manage agents(?:…)?$/ });
 	await userEvent.click(action);
-	await screen.findByRole("textbox", { name: "Search harnesses" });
+	// Management opens the selected agent's detail; the list search is transient.
+	await screen.findByRole("tab", { name: "Account" });
 }
 
 function requireCodexLogin(client?: QueryClient) {

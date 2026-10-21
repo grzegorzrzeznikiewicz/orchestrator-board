@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { defineConfig } from "@playwright/test";
 
 // Overridable because 5173 is not ours alone: another worktree's

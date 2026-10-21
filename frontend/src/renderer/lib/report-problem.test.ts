@@ -1,3 +1,7 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	collectReportProblemDiagnostics,
@@ -37,7 +41,7 @@ describe("report problem drafts", () => {
 
 			expect(draft).toContain("Terminal keeps reconnecting after daemon restart");
 			expect(draft).toContain("The app should reconnect without losing the current route.");
-			expect(draft).toContain("AO version: 1.2.3-test");
+			expect(draft).toContain("Orchestrator Board version: 1.2.3-test");
 			expect(draft).toContain("Daemon: ready");
 			expect(draft).toContain("Route surface: session_detail");
 		}
@@ -98,12 +102,13 @@ describe("report problem drafts", () => {
 	it("produces a useful draft when user input is partial", () => {
 		const draft = formatReportProblemDraft({ summary: "", details: "" }, diagnostics, "email");
 
-		expect(draft).toContain("AO feedback");
-		expect(draft).toContain("To: prasad@untrivial.ai");
-		expect(draft).toContain("Cc: prateek@untrivial.ai");
+		expect(draft).toContain("Orchestrator Board feedback");
+		expect(draft).not.toContain("To:");
+		expect(draft).not.toContain("Cc:");
+		expect(draft).not.toContain("untrivial.ai");
 		expect(draft).toContain("Not provided");
 		expect(draft).toContain("Safe diagnostics");
-		expect(draft).toContain("AO version: 1.2.3-test");
+		expect(draft).toContain("Orchestrator Board version: 1.2.3-test");
 	});
 
 	it("omits report type and footer copy from generated drafts", () => {
@@ -121,75 +126,30 @@ describe("report problem drafts", () => {
 		}
 	});
 
-	it("builds copy handoff destinations for GitHub, Discord, and support email", () => {
+	it("builds the configured fork issue destination with sanitized user content", () => {
 		const github = new URL(reportProblemDestinationUrl(completeInput, diagnostics, "github")!);
-		expect(`${github.origin}${github.pathname}`).toBe("https://github.com/Untrivial-ai/agent-orchestrator/issues/new");
+		expect(`${github.origin}${github.pathname}`).toBe("https://github.com/grzegorzrzeznikiewicz/orchestrator-board/issues/new");
 		expect(github.searchParams.get("title")).toBe("Terminal keeps reconnecting after daemon restart");
 		expect(github.searchParams.get("body")).toContain("[redacted-local-path]");
 		expect(github.searchParams.get("body")).toContain("[redacted-local-url]");
-
-		expect(reportProblemDestinationUrl(completeInput, diagnostics, "discord")).toBe(
-			"https://discord.gg/WjKNa7EbB8",
-		);
-
-		const email = new URL(reportProblemDestinationUrl(completeInput, diagnostics, "email")!);
-		expect(email.protocol).toBe("mailto:");
-		expect(email.pathname).toBe("prasad@untrivial.ai");
-		expect(email.searchParams.get("cc")).toBe("prateek@untrivial.ai");
-		expect(email.searchParams.get("subject")).toBe("AO feedback: Terminal keeps reconnecting after daemon restart");
-		expect(email.searchParams.get("body")).toContain("AO feedback");
-		expect(email.searchParams.get("body")).toContain("AO version: 1.2.3-test");
 	});
 
-	it("builds provider-specific web compose URLs for Windows email choices", () => {
-		const gmail = new URL(reportProblemDestinationUrl(completeInput, diagnostics, "email", "gmail")!);
-		expect(gmail.origin).toBe("https://mail.google.com");
-		expect(gmail.pathname).toBe("/mail/");
-		expect(gmail.searchParams.get("view")).toBe("cm");
-		expect(gmail.searchParams.get("to")).toBe("prasad@untrivial.ai");
-		expect(gmail.searchParams.get("cc")).toBe("prateek@untrivial.ai");
-		expect(gmail.searchParams.get("su")).toContain("Terminal keeps reconnecting");
-		expect(gmail.searchParams.get("body")).toContain("AO version: 1.2.3-test");
-
-		const outlook = new URL(reportProblemDestinationUrl(completeInput, diagnostics, "email", "outlook")!);
-		expect(outlook.origin).toBe("https://outlook.office.com");
-		expect(outlook.pathname).toBe("/mail/deeplink/compose");
-		expect(outlook.searchParams.get("to")).toBe("prasad@untrivial.ai");
-		expect(outlook.searchParams.get("cc")).toBe("prateek@untrivial.ai");
-		expect(outlook.searchParams.get("subject")).toContain("Terminal keeps reconnecting");
-		expect(outlook.searchParams.get("body")).toContain("AO version: 1.2.3-test");
+	it("does not route fork feedback to the unconfigured upstream Discord", () => {
+		expect(reportProblemDestinationUrl(completeInput, diagnostics, "discord")).toBeNull();
 	});
 
-	it("percent-encodes mailto spaces instead of serializing them as plus signs", () => {
-		const email = reportProblemDestinationUrl(
-			{
-				summary: "Switch Codex accounts bug",
-				details: "Keep literal + signs safe.",
-			},
-			diagnostics,
-			"email",
-		)!;
-
-		expect(email.startsWith("mailto:prasad@untrivial.ai?")).toBe(true);
-		expect(email).toContain("subject=AO%20feedback%3A%20Switch%20Codex%20accounts%20bug");
-		expect(email).toContain("body=AO%20feedback%0A%0ASummary%3A%20Switch%20Codex%20accounts%20bug");
-		expect(email).toContain("Keep%20literal%20%2B%20signs%20safe.");
-		expect(email).not.toContain("+");
+	it.each(["system", "gmail", "outlook"] as const)("does not route fork feedback to unconfigured %s email contacts", (provider) => {
+		expect(reportProblemDestinationUrl(completeInput, diagnostics, "email", provider)).toBeNull();
 	});
 
-	it("keeps mailto drafts sendable when pasted text contains malformed UTF-16", () => {
-		const email = new URL(
-			reportProblemDestinationUrl(
-				{
-					summary: "Broken \uD800 text",
-					details: "The pasted value should still open email.",
-				},
-				diagnostics,
-				"email",
-			)!,
-		);
+	it("preserves literal plus signs in issue draft query parameters", () => {
+		const issue = new URL(reportProblemDestinationUrl({ summary: "Account switch", details: "Keep literal + signs safe." }, diagnostics, "github")!);
+		expect(issue.searchParams.get("body")).toContain("Keep literal + signs safe.");
+	});
 
-		expect(email.searchParams.get("subject")).toBe("AO feedback: Broken � text");
+	it("keeps issue drafts usable when pasted text contains malformed UTF-16", () => {
+		const issue = new URL(reportProblemDestinationUrl({ summary: "Broken \uD800 text", details: "The pasted value should still open an issue." }, diagnostics, "github")!);
+		expect(issue.searchParams.get("title")).toBe("Broken � text");
 	});
 
 	it("derives route surface from the hash-history route", async () => {

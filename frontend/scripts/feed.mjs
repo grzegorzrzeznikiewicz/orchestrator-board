@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Generates electron-updater feed metadata (latest*.yml / nightly*.yml) plus
 // gzip sidecar blockmaps for a release's versioned installers. Dependency-free
 // ESM (mirrors nightly-version.mjs) so CI runs `node scripts/feed.mjs` directly
@@ -18,7 +20,9 @@ import { writeBlockmap } from "./blockmap.mjs";
 // arch split keys on the literal "arm64" substring, the same discriminator the
 // updater (MacUpdater.filterFilesForArch) uses.
 export function selectInstallers(filenames, version) {
-	const versioned = filenames.filter((f) => f.includes(version));
+	const versioned = filenames.filter((f) => f.includes(version)
+		&& /^orchestrator[. -]board[. -]/i.test(f)
+		&& !/[\\/]/.test(f));
 	const isDarwinZip = (f) => f.endsWith(".zip") && f.includes("darwin");
 	return {
 		win: versioned.filter((f) => f.endsWith(".exe")),

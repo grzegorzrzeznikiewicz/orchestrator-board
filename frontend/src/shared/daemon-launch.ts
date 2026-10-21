@@ -1,3 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
+
+import { PRODUCT } from "./product";
 export type DaemonLaunchSpec = {
 	command: string;
 	args: string[];
@@ -78,18 +83,18 @@ export function bundledDaemonIdentityError(
 ): string | null {
 	if (appImagePath) {
 		if (!probe.appImagePath) {
-			return "An older AO daemon is already running, but it does not report its install identity. Stop it and restart this app.";
+			return `An older ${PRODUCT.productName} daemon is already running, but it does not report its install identity. Stop it and restart this app.`;
 		}
 		if (!samePath(probe.appImagePath, appImagePath)) {
-			return `Another AO daemon is already running from ${probe.appImagePath}; expected ${appImagePath}. Stop the other daemon before using this app.`;
+			return `Another ${PRODUCT.productName} daemon is already running from ${probe.appImagePath}; expected ${appImagePath}. Stop the other daemon before using this app.`;
 		}
 		return null;
 	}
 	if (!probe.executablePath) {
-		return "An older AO daemon is already running, but it does not report its binary path. Stop it and restart this app.";
+		return `An older ${PRODUCT.productName} daemon is already running, but it does not report its binary path. Stop it and restart this app.`;
 	}
 	if (!samePath(probe.executablePath, expectedCommand)) {
-		return `Another AO daemon is already running from ${probe.executablePath}; expected ${expectedCommand}. Stop the other daemon before using this app.`;
+		return `Another ${PRODUCT.productName} daemon is already running from ${probe.executablePath}; expected ${expectedCommand}. Stop the other daemon before using this app.`;
 	}
 	return null;
 }

@@ -1,3 +1,4 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
 import { expect, test, type Page } from "@playwright/test";
 import { agentReadiness } from "../src/renderer/test/agent-readiness-fixtures";
 import { installFakeAgent } from "./support/fake-bridge";
@@ -65,6 +66,23 @@ async function openChat(page: Page, suggestionReady = Promise.resolve(), suggest
 	await expect(composer).toBeVisible({ timeout: 15_000 });
 	return { composer, sent, suggestion: page.getByTestId("prompt-suggestion") };
 }
+
+test("clicking Use suggestion fills and focuses an editable draft without sending @T0", async ({ page }) => {
+	await page.setViewportSize({ width: 480, height: 900 });
+	const { composer, sent, suggestion } = await openChat(page);
+	await expect(suggestion).toHaveText(prompt);
+	await page.getByRole("button", { name: "Use suggestion", exact: true }).click();
+	await expect(composer).toHaveText(prompt);
+	await expect(composer).toBeFocused();
+	await expect(suggestion).toBeHidden();
+	expect(sent).toEqual([]);
+	await page.keyboard.type(" Include regression coverage.");
+	await page.reload();
+	await expect(composer).toHaveText(`${prompt} Include regression coverage.`);
+	expect(sent).toEqual([]);
+	await page.getByRole("button", { name: "Send message", exact: true }).click();
+	await expect.poll(() => sent).toEqual([`${prompt} Include regression coverage.`]);
+});
 
 test("Tab inserts the suggested next message for editing, and Enter sends the edited draft @T0", async ({ page }) => {
 	const { composer, sent, suggestion } = await openChat(page);

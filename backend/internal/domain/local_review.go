@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package domain
 
 // ReviewTargetKind distinguishes a provider PR commit from local file contents.

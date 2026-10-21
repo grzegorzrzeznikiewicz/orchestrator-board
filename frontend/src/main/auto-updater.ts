@@ -1,3 +1,8 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
+import product from "../../product.json";
+import { readReleaseSource, RELEASE_REPO, STAGED_UPDATE_FILE_NAME, UpdateSourceError } from "./release-source";
+import { ForkGenericProvider, ForkStableProvider } from "./release-source-provider";
 import { autoUpdater as stockAutoUpdater } from "electron-updater";
 import { MacDifferentialV2Updater } from "./mac-differential-v2-updater";
 import macV2TrustedKeys from "../../scripts/mac-differential-v2-trust.json";
@@ -7,7 +12,7 @@ import { app, dialog, autoUpdater as nativeAutoUpdater } from "electron";
 import { startMacUpdateProgress } from "./mac-update-progress";
 import { markUpdateRelaunch } from "./update-relaunch-flag";
 import { accessSync, constants as fsConstants, existsSync, lstatSync, readFileSync, readdirSync, statfsSync, writeFileSync } from "node:fs";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import semver from "semver";
@@ -50,6 +55,7 @@ const FAIL_CLOSED_UPDATE_SETTINGS: UpdateSettings = {
   feature: null,
   macDifferentialUpdates: false,
 };
+autoUpdater.autoInstallOnAppQuit = false;
 let lastAppliedUpdateSettings: UpdateSettings = FAIL_CLOSED_UPDATE_SETTINGS;
 let developerModeHydrated = false;
 let developerModeRequested = false;
@@ -152,19 +158,11 @@ async function reconcileAndPersist(
   return latest;
 }
 
-// configureFeed sets the update channel on electron-updater. The repo/owner
-// are loaded automatically from app-update.yml (written by forge.config.ts's
-// postPackage hook into the app's Resources dir at build time). No runtime env
-// or setFeedURL call is needed; electron-updater reads the bundled yml on first
-// checkForUpdates.
-//
-// When settings.feature is set, the feed tracks the pr<N> prerelease channel
-// (e.g. "pr2270") with allowPrerelease enabled. Otherwise it uses the home
-// channel (latest vs nightly). An older binary cannot safely read a database
-// already migrated by this one, so a channel switch must wait for a newer build.
+// Always install an explicitly validated fork provider before a stable check.
 export function configureFeed(
   settings: Pick<UpdateSettings, "channel" | "feature">,
 ): void {
+  const coordinates = readReleaseSource();
   if (settings.feature !== null && settings.feature !== undefined) {
     // Feature build: pin to the pr<N> semver prerelease identifier channel.
     autoUpdater.channel = `pr${settings.feature.pr}`;
@@ -181,6 +179,9 @@ export function configureFeed(
   // scanning on the nightly channel only; stable must never pull prereleases.
   autoUpdater.allowPrerelease = channel === "nightly";
   autoUpdater.allowDowngrade = false;
+  if (channel === "latest") {
+    autoUpdater.setFeedURL({ provider: "custom", updateProvider: ForkStableProvider, ...coordinates } as Parameters<typeof autoUpdater.setFeedURL>[0]);
+  }
 }
 
 let lastStatus: UpdateStatus = { state: "idle" };
@@ -661,27 +662,9 @@ function broadcastCompletedCheck(status: UpdateStatus): void {
   broadcastUpdaterStatus(status);
 }
 
-// --- Read-only release-feed helpers (packaged app only; every failure is silent).
-// These regex-parse flat keys out of electron-builder yml files on purpose: no
-// yaml dependency, and a parse miss just means "no info", never an error state
-// (see issue #2270 for why this path must not broadcast errors).
-
-/** Owner/repo from the bundled app-update.yml; undefined in dev or on any failure. */
-async function readAppUpdateYml(): Promise<
-  { owner: string; repo: string } | undefined
-> {
-  if (!app.isPackaged) return undefined;
-  try {
-    const yml = await readFile(
-      path.join(process.resourcesPath, "app-update.yml"),
-      "utf8",
-    );
-    const owner = /^owner:\s*(.+)$/m.exec(yml)?.[1]?.trim();
-    const repo = /^repo:\s*(.+)$/m.exec(yml)?.[1]?.trim();
-    return owner && repo ? { owner, repo } : undefined;
-  } catch {
-    return undefined;
-  }
+// All discovery uses the same validated bundled source as installation.
+async function readAppUpdateYml(): Promise<{ owner: string; repo: string }> {
+  return readReleaseSource();
 }
 
 interface GitHubReleaseSummary {
@@ -701,8 +684,8 @@ let releaseDiscoveryCache: { url: string; etag: string; releases: GitHubReleaseS
  * Resolve a completed Nightly release through GitHub's API. electron-updater's
  * GitHub provider discovers prereleases through releases.atom, which can lag
  * behind a just-published release even when the release and manifest are ready.
- * This is used only for user-requested checks; failures fall back to the normal
- * provider so API rate limits or an outage never break update checks.
+ * Used for every prerelease check. Missing discovery stops that check; the
+ * GitHub provider may silently substitute latest.yml and is never a fallback.
  */
 async function fetchLatestCompletedPrereleaseTag(
   owner: string,
@@ -716,6 +699,7 @@ async function fetchLatestCompletedPrereleaseTag(
       url,
       {
         cache: "no-store",
+        redirect: "error",
         headers: {
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
@@ -775,35 +759,26 @@ function directPrereleaseChannel(
  * silently stale, and an entry whose manifest has not finished uploading 404s
  * a check whose error the automatic path deliberately swallows — in both cases
  * the sidebar never learns an update exists.
- * The returned reset restores the normal GitHub provider for later background
- * checks; electron-updater retains the direct provider with the discovered
- * update, so a subsequent Download action still uses the correct asset URLs.
+ * The direct provider remains selected for later manual downloads. Each new
+ * check must validate and select its own source again.
  */
 async function configureDirectPrereleaseFeed(
   settings: UpdateSettings,
-): Promise<(() => void) | undefined> {
+): Promise<void> {
   // Cleared up front so a discovery that finds nothing newer (or bails below)
   // never leaves a stale build from a previous check readable by the caller.
   directFeedDiscoveredAvailable = undefined;
   const channel = directPrereleaseChannel(settings);
-  if (!channel) return undefined;
+  if (!channel) return;
   const coordinates = await readAppUpdateYml();
-  if (!coordinates) return undefined;
   const release = await fetchLatestCompletedPrereleaseTag(
     coordinates.owner,
     coordinates.repo,
     channel,
   );
-  if (!release) return undefined;
+  if (!release) throw new UpdateSourceError(`no completed ${channel} release is available in this fork.`);
   const { tag } = release;
   const runningVersion = app.getVersion();
-  if (
-    semver.valid(runningVersion) !== null &&
-    semver.prerelease(runningVersion)?.[0] === channel &&
-    semver.lt(tag, runningVersion)
-  ) {
-    return undefined;
-  }
 
   // Stand in for what the generic provider cannot supply. Overwritten by the
   // real thing if a later event does carry notes.
@@ -822,18 +797,14 @@ async function configureDirectPrereleaseFeed(
     };
   }
   autoUpdater.setFeedURL({
-    provider: "generic",
+    provider: "custom",
+    updateProvider: ForkGenericProvider,
     url: `https://github.com/${coordinates.owner}/${coordinates.repo}/releases/download/${tag}`,
     channel,
     useMultipleRangeRequest: false,
-  });
-  return () => {
-    autoUpdater.setFeedURL({
-      provider: "github",
-      owner: coordinates.owner,
-      repo: coordinates.repo,
-    });
-  };
+  } as Parameters<typeof autoUpdater.setFeedURL>[0]);
+  // Retain the exact provider for a later manual download. configureFeed replaces
+  // it before stable discovery; prerelease discovery must succeed before checking.
 }
 
 /** Platform suffix matching the feed.mjs naming convention. */
@@ -903,8 +874,6 @@ function stagedStamp(): Pick<UpdateStatus, "staged" | "releaseNotes"> {
  * channel switch after that restart could not be recognised as stranding
  * anything, which is the case stagedBuildIsStale exists to catch.
  */
-const STAGED_UPDATE_FILE_NAME = "staged-update.json";
-
 function stagedUpdateFile(stateDir: string): string {
   return path.join(stateDir, STAGED_UPDATE_FILE_NAME);
 }
@@ -918,6 +887,7 @@ function persistStagedBuild(stateDir: string | undefined): void {
   if (stateDir === undefined || stagedVersion === undefined || stagedAtMs === undefined) return;
   const releaseNotes = stagedReleaseNotes;
   const payload = `${JSON.stringify({
+    releaseRepo: RELEASE_REPO,
     version: stagedVersion,
     stagedAt: stagedAtMs,
     channel: stagedChannel,
@@ -952,6 +922,7 @@ function restoreStagedBuild(stateDir: string): void {
   // once per process.
   let raw: {
     version?: unknown;
+    releaseRepo?: unknown;
     stagedAt?: unknown;
     channel?: unknown;
     releaseNotes?: unknown;
@@ -961,12 +932,14 @@ function restoreStagedBuild(stateDir: string): void {
   } catch {
     return;
   }
+  if (!raw || typeof raw !== "object" || raw.releaseRepo !== RELEASE_REPO) return;
   const olderStaged = typeof raw.version === "string" &&
     semver.valid(raw.version) !== null &&
     semver.valid(app.getVersion()) !== null &&
     semver.lt(raw.version, app.getVersion());
   if (
     typeof raw.version !== "string" ||
+    semver.valid(raw.version) === null ||
     typeof raw.stagedAt !== "number" ||
     !Number.isFinite(raw.stagedAt) ||
     raw.version === app.getVersion() ||
@@ -1321,6 +1294,24 @@ async function runSerializedUpdaterOperation(
   requestId?: string,
 ): Promise<void> {
   const run = async () => {
+    if (app.isPackaged && operation !== "cache-clear") {
+      try {
+        readReleaseSource();
+        // electron-updater 6.8.9's adapter defaults to the OS cache directory.
+        // Keep this fork's downloads under the existing AO data boundary and
+        // never adopt, purge or migrate the original application's cache.
+        const adapter = (autoUpdater as unknown as { app: { baseCachePath: string } }).app;
+        Object.defineProperty(adapter, "baseCachePath", {
+          configurable: true,
+          value: escalationStateDir ?? process.env.AO_DATA_DIR ?? path.join(os.homedir(), ".ao"),
+        });
+      } catch (error) {
+        autoUpdater.autoDownload = false;
+        autoUpdater.autoInstallOnAppQuit = false;
+        broadcast({ state: "error", message: errorMessage(error), requestId });
+        throw error;
+      }
+    }
     if (nativePreparationBlocked) throw nativePreparationBlocked;
     // A completed proxy transfer is not completed native staging. Holding this
     // gate prevents a late native event for A being attributed to a newer B.
@@ -2201,9 +2192,7 @@ async function runAutomaticUpdateCheck(
       applyInstallOnQuitPolicy();
       // Only prerelease channels resolve a direct feed. Skipping the await on
       // stable keeps that check's event ordering exactly as it was.
-      const restoreFeed = directPrereleaseChannel(settings)
-        ? await configureDirectPrereleaseFeed(settings)
-        : undefined;
+      if (directPrereleaseChannel(settings)) await configureDirectPrereleaseFeed(settings);
       try {
         const result = await checkForUpdatesWithDeadline();
         settleCheckStatus(result);
@@ -2241,10 +2230,6 @@ async function runAutomaticUpdateCheck(
         }
         throw err;
       } finally {
-        // After the download too: the staged build is already resolved against
-        // the direct provider, and later background checks start from the
-        // normal GitHub feed again.
-        restoreFeed?.();
         // If the check could not confirm the update (a stalled or timed-out
         // manifest fetch on a network that cannot reach the asset CDN), fall
         // back to the build API discovery already found on a host that answers.
@@ -2252,6 +2237,7 @@ async function runAutomaticUpdateCheck(
       }
     });
   } catch (err) {
+    if (err instanceof UpdateSourceError) broadcast({ state: "error", message: err.message });
     console.error("auto-update check failed:", err);
   }
   return nextIntervalMs;
@@ -2408,28 +2394,23 @@ export async function checkForUpdatesNow(
         autoUpdater.autoDownload = staleStaged || (hasStagedBuild() && !isNativeInstallReady());
         applyInstallOnQuitPolicy();
         broadcastUpdaterStatus({ state: "checking" });
-        const restoreFeed = await configureDirectPrereleaseFeed(settings);
-        try {
-          const result = await checkForUpdatesWithDeadline();
-          settleCheckStatus(result);
-          // A stale staged build forces a download above; own it here so the
-          // feed is not restored, and the next operation not started, while it
-          // is still running.
-          if (result?.downloadPromise) failed.phase = "download";
-          await awaitStartedDownload(result);
-          if (!result?.downloadPromise && settings.enabled && result?.isUpdateAvailable &&
-              (!hasStagedBuild() || supersedesStagedBuild(result.updateInfo?.version))) {
-            failed.phase = "download";
-            activeUpdaterPhase = "download";
-            pendingUpdateVersion = result.updateInfo?.version;
-            const token = new CancellationToken();
-            activeDownloadCancellation = token;
-            broadcastUpdaterStatus({ state: "downloading", version: pendingUpdateVersion });
-            armDownloadStallWatchdog();
-            await autoUpdater.downloadUpdate(token);
-          }
-        } finally {
-          restoreFeed?.();
+        await configureDirectPrereleaseFeed(settings);
+        const result = await checkForUpdatesWithDeadline();
+        settleCheckStatus(result);
+        // A stale staged build forces a download above; own it here so the
+        // next operation cannot change the provider while it is still running.
+        if (result?.downloadPromise) failed.phase = "download";
+        await awaitStartedDownload(result);
+        if (!result?.downloadPromise && settings.enabled && result?.isUpdateAvailable &&
+            (!hasStagedBuild() || supersedesStagedBuild(result.updateInfo?.version))) {
+          failed.phase = "download";
+          activeUpdaterPhase = "download";
+          pendingUpdateVersion = result.updateInfo?.version;
+          const token = new CancellationToken();
+          activeDownloadCancellation = token;
+          broadcastUpdaterStatus({ state: "downloading", version: pendingUpdateVersion });
+          armDownloadStallWatchdog();
+          await autoUpdater.downloadUpdate(token);
         }
       },
       options.requestId,
@@ -2511,6 +2492,7 @@ export async function returnToHome(
         autoUpdater.autoDownload = staleStaged || (hasStagedBuild() && !isNativeInstallReady());
         applyInstallOnQuitPolicy();
         broadcastUpdaterStatus({ state: "checking" });
+        await configureDirectPrereleaseFeed(settings);
         const result = await checkForUpdatesWithDeadline();
         settleCheckStatus(result);
         // Same ownership rule as the other two paths: leaving a pinned build is
@@ -2654,9 +2636,9 @@ export function getMacInstallBlocker(): string | undefined {
   if (!bundle.endsWith(".app")) return undefined;
   if (bundle.includes("/AppTranslocation/")) {
     return (
-      "macOS is running Agent Orchestrator from a temporary read-only location " +
+      `macOS is running ${product.productName} from a temporary read-only location ` +
       "because it was opened straight from where it was downloaded. Quit the app, " +
-      "move Agent Orchestrator.app into /Applications, reopen it from there, and " +
+      `move ${product.productName}.app into /Applications, reopen it from there, and ` +
       "then restart to update."
     );
   }
@@ -2669,9 +2651,9 @@ export function getMacInstallBlocker(): string | undefined {
     // Deliberately does NOT say "move it to /Applications": the app may already
     // be there, and telling someone to do what they have done reads as a bug.
     return (
-      "The update can't be installed because Agent Orchestrator's location isn't " +
+      `The update can't be installed because ${product.productName}'s location isn't ` +
       `writable: ${path.dirname(bundle)}. Fix that folder's permissions, or move ` +
-      "Agent Orchestrator.app somewhere you can write to, reopen it, and then " +
+      `${product.productName}.app somewhere you can write to, reopen it, and then ` +
       "restart to update."
     );
   }
@@ -2711,6 +2693,10 @@ export async function quitAndInstallUpdate(confirmedVersion?: string): Promise<U
     throw new Error("A valid confirmed update version is required.");
   }
   if (!app.isPackaged) return;
+  try { readReleaseSource(); } catch (error) {
+    autoUpdater.autoInstallOnAppQuit = false;
+    throw error;
+  }
   if (awaitingStagedReplacement) {
     throw new Error("Check for updates and download an update before restarting to install.");
   }
@@ -2821,32 +2807,28 @@ async function prepareRememberedMacUpdate(confirmedVersion?: string): Promise<Up
   autoUpdater.autoDownload = false;
   applyInstallOnQuitPolicy();
   broadcastUpdaterStatus({ state: "checking" });
-  const restoreFeed = await configureDirectPrereleaseFeed(settings);
-  try {
-    const result = await checkForUpdatesWithDeadline();
-    if (result?.isUpdateAvailable !== true) {
-      throw new Error("The remembered update is no longer available on the selected channel. Check for updates and try again.");
-    }
-    // A remembered stamp is not permission to install a different release.
-    // Stop before downloading/arming it so cancelling the new confirmation
-    // cannot install the unconfirmed target on a later ordinary quit.
-    if (confirmedVersion !== undefined && result.updateInfo.version !== confirmedVersion) {
-      return {
-        state: "confirmation-required",
-        version: result.updateInfo.version,
-        releaseNotes: normalizeReleaseNotes(result.updateInfo.releaseNotes) ?? directFeedReleaseNotes,
-      };
-    }
-    activeUpdaterPhase = "download";
-    pendingUpdateVersion = result.updateInfo.version;
-    const token = new CancellationToken();
-    activeDownloadCancellation = token;
-    // A cache hit re-establishes the native feed. The download promise is not
-    // native readiness: waitForNativePreparation separately gates the quit.
-    await autoUpdater.downloadUpdate(token);
-  } finally {
-    restoreFeed?.();
+  await configureDirectPrereleaseFeed(settings);
+  const result = await checkForUpdatesWithDeadline();
+  if (result?.isUpdateAvailable !== true) {
+    throw new Error("The remembered update is no longer available on the selected channel. Check for updates and try again.");
   }
+  // A remembered stamp is not permission to install a different release.
+  // Stop before downloading/arming it so cancelling the new confirmation
+  // cannot install the unconfirmed target on a later ordinary quit.
+  if (confirmedVersion !== undefined && result.updateInfo.version !== confirmedVersion) {
+    return {
+      state: "confirmation-required",
+      version: result.updateInfo.version,
+      releaseNotes: normalizeReleaseNotes(result.updateInfo.releaseNotes) ?? directFeedReleaseNotes,
+    };
+  }
+  activeUpdaterPhase = "download";
+  pendingUpdateVersion = result.updateInfo.version;
+  const token = new CancellationToken();
+  activeDownloadCancellation = token;
+  // A cache hit re-establishes the native feed. The download promise is not
+  // native readiness: waitForNativePreparation separately gates the quit.
+  await autoUpdater.downloadUpdate(token);
 }
 
 // On Windows and Linux, a remembered staged build has no installer file in
@@ -2859,20 +2841,16 @@ async function prepareRememberedNonDarwinUpdate(): Promise<void> {
   configureFeed(settings);
   autoUpdater.autoDownload = false;
   broadcastUpdaterStatus({ state: "checking" });
-  const restoreFeed = await configureDirectPrereleaseFeed(settings);
-  try {
-    const result = await checkForUpdatesWithDeadline();
-    if (result?.isUpdateAvailable !== true) {
-      throw new Error("The remembered update is no longer available. Check for updates and try again.");
-    }
-    activeUpdaterPhase = "download";
-    pendingUpdateVersion = result.updateInfo.version;
-    const token = new CancellationToken();
-    activeDownloadCancellation = token;
-    await autoUpdater.downloadUpdate(token);
-  } finally {
-    restoreFeed?.();
+  await configureDirectPrereleaseFeed(settings);
+  const result = await checkForUpdatesWithDeadline();
+  if (result?.isUpdateAvailable !== true) {
+    throw new Error("The remembered update is no longer available. Check for updates and try again.");
   }
+  activeUpdaterPhase = "download";
+  pendingUpdateVersion = result.updateInfo.version;
+  const token = new CancellationToken();
+  activeDownloadCancellation = token;
+  await autoUpdater.downloadUpdate(token);
 }
 
 // ensureUpdatePrefs prompts once (first run, before any settings file exists)
@@ -2886,7 +2864,7 @@ export async function ensureUpdatePrefs(stateDir: string): Promise<void> {
     buttons: ["Enable auto-updates", "Not now"],
     defaultId: 0,
     cancelId: 1,
-    message: "Keep Agent Orchestrator up to date automatically?",
+    message: `Keep ${product.productName} up to date automatically?`,
     detail: "You can change this later in Settings.",
   });
   if (optIn.response !== 0) {

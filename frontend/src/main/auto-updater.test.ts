@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -31,6 +33,7 @@ type ImportOptions = {
 };
 
 type AutoUpdaterMock = {
+  app: { baseCachePath: string };
   on: ReturnType<typeof vi.fn>;
   checkForUpdates: ReturnType<typeof vi.fn>;
   downloadUpdate: ReturnType<typeof vi.fn>;
@@ -56,6 +59,7 @@ type AutoUpdaterMock = {
 
 function createAutoUpdaterMock(): AutoUpdaterMock {
   return {
+    app: { baseCachePath: "/legacy-upstream-cache" },
     on: vi.fn(),
     checkForUpdates: vi.fn(() => Promise.resolve()),
     downloadUpdate: vi.fn(() => Promise.resolve()),
@@ -85,13 +89,29 @@ function createAutoUpdaterMock(): AutoUpdaterMock {
 // module can still land while its directory is being removed, so the removal
 // retries rather than failing the run on ENOTEMPTY.
 let stateDir = "";
+const hostResources = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+const forkYml = "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n";
 const hostPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
 beforeEach(() => {
   Object.defineProperty(process, "platform", { value: "linux" });
   stateDir = mkdtempSync(nodePath.join(os.tmpdir(), "ao-updater-state-"));
+  const resources = nodePath.join(stateDir, "resources");
+  mkdirSync(resources);
+  writeFileSync(nodePath.join(resources, "app-update.yml"), forkYml);
+  Object.defineProperty(process, "resourcesPath", { configurable: true, value: resources });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(
+    ["nightly", ...[2270, 2709, 2710, 3288, 4473, 4729, 4900].map(pr => `pr${pr}`)].map(channel => ({
+      tag_name: `v0.0.1-${channel}.202601010000`, draft: false, prerelease: true,
+      assets: ["-mac", "-linux", ""].map(suffix => ({ name: `${channel}${suffix}.yml` })),
+    })),
+  ), { status: 200 })));
+
 });
 afterEach(() => {
   Object.defineProperty(process, "platform", hostPlatform);
+  if (hostResources) Object.defineProperty(process, "resourcesPath", hostResources);
+  else Reflect.deleteProperty(process, "resourcesPath");
+  vi.unstubAllGlobals();
   rmSync(stateDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 25 });
 });
 
@@ -541,6 +561,8 @@ describe("startAutoUpdates", () => {
       const { module, autoUpdater, updaterEvents } = await importAutoUpdater();
       await module.checkForUpdatesNow(stateDir);
       updaterEvents.get("update-downloaded")?.({ version: "2.1.0" });
+      const stagedFile = nodePath.join(stateDir, "orchestrator-board-staged-update.json");
+      await vi.waitFor(() => expect(existsSync(stagedFile)).toBe(true));
       const error = new Error("ditto: /cache/app.ShipIt/update.abc/AO.app/Contents/Resources/._app.asar__: No such file or directory");
       autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
         updaterEvents.get("checking-for-update")?.();
@@ -550,7 +572,7 @@ describe("startAutoUpdates", () => {
       await module.startAutoUpdates(stateDir);
       expect(module.getUpdateStatus()).toMatchObject({ state: "error", message: expect.stringContaining("prepare the update") });
       expect(module.getUpdateStatus().staged).toBeUndefined();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await vi.waitFor(() => expect(existsSync(stagedFile)).toBe(false));
       const second = await importAutoUpdaterKeepingStagedFile();
       await second.module.startAutoUpdates(stateDir);
       expect(second.module.getUpdateStatus().staged).toBeUndefined();
@@ -705,7 +727,7 @@ describe("startAutoUpdates", () => {
     );
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(
       process,
@@ -753,21 +775,18 @@ describe("startAutoUpdates", () => {
       await module.checkForUpdatesNow(stateDir);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://api.github.com/repos/Untrivial-ai/agent-orchestrator/releases?per_page=100",
+        "https://api.github.com/repos/grzegorzrzeznikiewicz/orchestrator-board/releases?per_page=100",
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
       expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
-        provider: "generic",
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.1-nightly.202608231517",
+        provider: "custom",
+        updateProvider: expect.any(Function),
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.1-nightly.202608231517",
         channel: "nightly",
         useMultipleRangeRequest: false,
       });
       expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, {
-        provider: "github",
-        owner: "Untrivial-ai",
-        repo: "agent-orchestrator",
-      });
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(1);
     } finally {
       if (originalResourcesPath) {
         Object.defineProperty(process, "resourcesPath", originalResourcesPath);
@@ -790,7 +809,7 @@ describe("startAutoUpdates", () => {
     );
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(
       process,
@@ -857,7 +876,7 @@ describe("startAutoUpdates", () => {
     );
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(
       process,
@@ -905,12 +924,13 @@ describe("startAutoUpdates", () => {
       await module.checkForUpdatesNow(stateDir);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://api.github.com/repos/Untrivial-ai/agent-orchestrator/releases?per_page=100",
+        "https://api.github.com/repos/grzegorzrzeznikiewicz/orchestrator-board/releases?per_page=100",
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
       expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
-        provider: "generic",
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.1-nightly.202608231517",
+        provider: "custom",
+        updateProvider: expect.any(Function),
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.1-nightly.202608231517",
         channel: "nightly",
         useMultipleRangeRequest: false,
       });
@@ -920,23 +940,19 @@ describe("startAutoUpdates", () => {
         expect.any(String),
         expect.objectContaining({ headers: expect.objectContaining({ "If-None-Match": '"release-v1"' }) }),
       );
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(3, expect.objectContaining({
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.1-nightly.202608231517",
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.1-nightly.202608231517",
       }));
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{
         tag_name: "v1.0.2-nightly.202608241000", draft: false, prerelease: true,
         assets: [{ name: platformManifest }],
       }]), { status: 200, headers: { etag: '"release-v2"' } }));
       await module.checkForUpdatesNow(stateDir);
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(5, expect.objectContaining({
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.2-nightly.202608241000",
+      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(3, expect.objectContaining({
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.2-nightly.202608241000",
       }));
       expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(3);
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, {
-        provider: "github",
-        owner: "Untrivial-ai",
-        repo: "agent-orchestrator",
-      });
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(3);
     } finally {
       if (originalResourcesPath) {
         Object.defineProperty(process, "resourcesPath", originalResourcesPath);
@@ -961,7 +977,7 @@ describe("startAutoUpdates", () => {
     const resourcesPath = mkdtempSync(nodePath.join(os.tmpdir(), "ao-nightly-notes-"));
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
     Object.defineProperty(process, "resourcesPath", { configurable: true, value: resourcesPath });
@@ -1021,7 +1037,7 @@ describe("startAutoUpdates", () => {
     );
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(
       process,
@@ -1066,18 +1082,15 @@ describe("startAutoUpdates", () => {
       await module.startAutoUpdates(stateDir);
 
       expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
-        provider: "generic",
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.1-nightly.202608231517",
+        provider: "custom",
+        updateProvider: expect.any(Function),
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.1-nightly.202608231517",
         channel: "nightly",
         useMultipleRangeRequest: false,
       });
       expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
       // Later background checks start from the normal provider again.
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, {
-        provider: "github",
-        owner: "Untrivial-ai",
-        repo: "agent-orchestrator",
-      });
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(1);
     } finally {
       if (originalResourcesPath) {
         Object.defineProperty(process, "resourcesPath", originalResourcesPath);
@@ -1100,7 +1113,7 @@ describe("startAutoUpdates", () => {
     );
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(
       process,
@@ -1148,17 +1161,14 @@ describe("startAutoUpdates", () => {
       await module.startAutoUpdates(stateDir);
 
       expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(1, {
-        provider: "generic",
-        url: "https://github.com/Untrivial-ai/agent-orchestrator/releases/download/v1.0.0-pr4473.202608271542",
+        provider: "custom",
+        updateProvider: expect.any(Function),
+        url: "https://github.com/grzegorzrzeznikiewicz/orchestrator-board/releases/download/v1.0.0-pr4473.202608271542",
         channel: "pr4473",
         useMultipleRangeRequest: false,
       });
       expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
-      expect(autoUpdater.setFeedURL).toHaveBeenNthCalledWith(2, {
-        provider: "github",
-        owner: "Untrivial-ai",
-        repo: "agent-orchestrator",
-      });
+      expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(1);
     } finally {
       if (originalResourcesPath) {
         Object.defineProperty(process, "resourcesPath", originalResourcesPath);
@@ -1489,7 +1499,7 @@ describe("startAutoUpdates", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const restore = stubProcess("darwin", "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
         version: "2.1.0", stagedAt: Date.now(), channel: "latest",
       }));
       const { module, autoUpdater, updaterEvents } = await importAutoUpdater(
@@ -1507,14 +1517,14 @@ describe("startAutoUpdates", () => {
       expect(module.getUpdateStatus().staged).toBeUndefined();
       // The file deletion is async (fire-and-forget queue); give it a tick.
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(existsSync(nodePath.join(stateDir, "staged-update.json"))).toBe(false);
+      expect(existsSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"))).toBe(false);
     } finally { restore(); }
   });
 
   it("clears a remembered build on non-darwin platforms too", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
       version: "2.1.0", stagedAt: Date.now(), channel: "latest",
     }));
     const { module, autoUpdater, updaterEvents } = await importAutoUpdater(
@@ -2886,8 +2896,9 @@ describe("startAutoUpdates", () => {
     });
     // The persist is fire-and-forget real I/O; flushing microtasks cannot land it.
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(JSON.parse(readFileSync(nodePath.join(stateDir, "staged-update.json"), "utf8")))
+    expect(JSON.parse(readFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), "utf8")))
       .toMatchObject({
+        releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
         version: "2.1.0-nightly.1",
         releaseNotes: "Run <ao update> safely\nImproved update reliability",
       });
@@ -2920,7 +2931,7 @@ describe("startAutoUpdates", () => {
   it("backfills notes when an older staged record rediscovers the same nightly", async () => {
     const version = "1.0.1-nightly.202608231517";
     const stagedAt = Date.now() - 60_000;
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
       version,
       stagedAt,
       channel: "nightly",
@@ -2928,7 +2939,7 @@ describe("startAutoUpdates", () => {
     const resourcesPath = mkdtempSync(nodePath.join(os.tmpdir(), "ao-staged-nightly-notes-"));
     writeFileSync(
       nodePath.join(resourcesPath, "app-update.yml"),
-      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+      "provider: github\nowner: grzegorzrzeznikiewicz\nrepo: orchestrator-board\nupdaterCacheDirName: orchestrator-board-updater\n",
     );
     const originalResourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
     Object.defineProperty(process, "resourcesPath", { configurable: true, value: resourcesPath });
@@ -2960,7 +2971,7 @@ describe("startAutoUpdates", () => {
       });
       expect(harness.autoUpdater.downloadUpdate).not.toHaveBeenCalled();
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(JSON.parse(readFileSync(nodePath.join(stateDir, "staged-update.json"), "utf8")))
+      expect(JSON.parse(readFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), "utf8")))
         .toMatchObject({
           version,
           stagedAt,
@@ -3010,7 +3021,7 @@ describe("startAutoUpdates", () => {
   });
 
   it("keeps staged records without release notes backward compatible", async () => {
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
       version: "2.1.0",
       stagedAt: Date.now(),
       channel: "latest",
@@ -3038,7 +3049,7 @@ describe("startAutoUpdates", () => {
   });
 
   it("drops an older staged build from the running channel", async () => {
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
       version: "0.12.13-nightly.202609070711",
       stagedAt: Date.now(),
       channel: "nightly",
@@ -3054,7 +3065,7 @@ describe("startAutoUpdates", () => {
   });
 
   it("drops an older staged build from another channel", async () => {
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board",
       version: "0.12.10-nightly.1",
       stagedAt: Date.now(),
       channel: "nightly",
@@ -3395,7 +3406,7 @@ describe("quitAndInstallUpdate", () => {
   it("requires new confirmation before downloading a changed remembered target", async () => {
     const restore = stubProcess("darwin", "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater, updaterEvents, startMacUpdateProgress } = await importAutoUpdater({ enabled: false, channel: "latest", nightlyAck: false, feature: null });
       await module.startAutoUpdates(stateDir);
       autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: "2.2.0", releaseNotes: "New release B" } });
@@ -3432,7 +3443,7 @@ describe("quitAndInstallUpdate", () => {
   it("requires confirmation again if the feed changes a second time", async () => {
     const restore = stubProcess("darwin", "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater } = await importAutoUpdater({ enabled: false, channel: "latest", nightlyAck: false, feature: null });
       await module.startAutoUpdates(stateDir);
       for (const [confirmed, offered] of [["2.1.0", "2.2.0"], ["2.2.0", "2.3.0"]]) {
@@ -3447,7 +3458,7 @@ describe("quitAndInstallUpdate", () => {
   it("prepares a remembered macOS update again before requesting restart", async () => {
     const restore = stubProcess("darwin", "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater, updaterEvents, nativeAutoUpdater } = await importAutoUpdater(undefined, { nativeReadyManually: true });
       await module.startAutoUpdates(stateDir);
       const downloaded = deferred();
@@ -3477,7 +3488,7 @@ describe("quitAndInstallUpdate", () => {
   it.each(["no longer available", "download failed"])("keeps AO open when restart preparation is %s", async (failure) => {
     const restore = stubProcess("darwin", "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater } = await importAutoUpdater(undefined, { nativeReadyManually: true });
       await module.startAutoUpdates(stateDir);
       autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: failure === "download failed", updateInfo: { version: "2.1.0" } });
@@ -3551,7 +3562,7 @@ describe("quitAndInstallUpdate", () => {
     const restore = stubProcess("darwin", "/usr/bin/node");
     vi.useFakeTimers();
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater, updaterEvents, nativeAutoUpdater } = await importAutoUpdater(undefined, { nativeReadyManually: true });
       module.__setStagingProbesForTesting({ readStagingBytes: () => 1 });
       await module.startAutoUpdates(stateDir);
@@ -3606,7 +3617,7 @@ describe("quitAndInstallUpdate", () => {
   });
 
   it("serializes a stale-channel replacement even when automatic downloads are disabled", async () => {
-    writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "nightly" }));
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "nightly" }));
     const { module, autoUpdater } = await importAutoUpdater({ enabled: false, channel: "latest", nightlyAck: false, feature: null });
     const transfer = deferred();
     autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: "2.1.0" }, downloadPromise: transfer.promise, cancellationToken: new CancellationToken() });
@@ -3682,7 +3693,7 @@ describe("quitAndInstallUpdate", () => {
   it.each(["win32", "linux"] as const)("re-downloads a remembered build before install on %s", async (platform) => {
     const restore = stubProcess(platform, "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater, updaterEvents } = await importAutoUpdater();
       await module.startAutoUpdates(stateDir);
       autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: "2.1.0" } });
@@ -3699,7 +3710,7 @@ describe("quitAndInstallUpdate", () => {
   it.each(["win32", "linux"] as const)("throws when a remembered build is no longer available on %s", async (platform) => {
     const restore = stubProcess(platform, "/usr/bin/node");
     try {
-      writeFileSync(nodePath.join(stateDir, "staged-update.json"), JSON.stringify({ version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
+      writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "2.1.0", stagedAt: Date.now(), channel: "latest" }));
       const { module, autoUpdater } = await importAutoUpdater();
       await module.startAutoUpdates(stateDir);
       autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: false, updateInfo: { version: "2.1.0" } });
@@ -4601,4 +4612,87 @@ it("falls back to the 2 GiB cap when the archive size is unknown", async () => {
     updaterEvents.get("update-downloaded")?.({ version: "2.0.0" });
     expect(required.at(-1)).toBe(2 * 1024 * 1024 * 1024);
   } finally { restore(); }
+});
+
+
+describe("fork update boundary", () => {
+  it("places the dependency cache under the supplied state directory", async () => {
+    const { module, autoUpdater } = await importAutoUpdater();
+    await module.startAutoUpdates(stateDir);
+    expect(autoUpdater.app.baseCachePath).toBe(stateDir);
+  });
+
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  it.each(["automatic", "manual", "return-home", "download"].flatMap(entry =>
+    ["missing", "malformed", "foreign"].map(config => ({ entry, config })),
+  ))("blocks $entry with $config bundled configuration before network", async ({ entry, config }) => {
+    const original = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+    Object.defineProperty(process, "resourcesPath", { configurable: true, value: stateDir });
+    if (config !== "missing") writeFileSync(nodePath.join(stateDir, "app-update.yml"),
+      config === "malformed" ? "provider: [github" : forkYml.replace("grzegorzrzeznikiewicz", "foreign"));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const { module, autoUpdater, statusMessages } = await importAutoUpdater();
+      if (entry === "automatic") await module.startAutoUpdates(stateDir);
+      if (entry === "manual") await module.checkForUpdatesNow(stateDir);
+      if (entry === "return-home") await module.returnToHome(stateDir);
+      if (entry === "download") await module.downloadUpdateNow();
+      expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+      expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(statusMessages().at(-1)?.payload).toMatchObject({ state: "error", message: expect.stringMatching(/update configuration/i) });
+    } finally {
+      if (original) Object.defineProperty(process, "resourcesPath", original);
+      else Reflect.deleteProperty(process, "resourcesPath");
+    }
+  });
+  it("refuses installation when configuration becomes foreign after staging", async () => {
+    const { module, autoUpdater, updaterEvents } = await importAutoUpdater();
+    await module.checkForUpdatesNow(stateDir);
+    updaterEvents.get("update-downloaded")?.({ version: "2.0.0" });
+    writeFileSync(nodePath.join(process.resourcesPath, "app-update.yml"), forkYml.replace("grzegorzrzeznikiewicz", "foreign"));
+    await expect(module.quitAndInstallUpdate()).rejects.toThrow(/update configuration/);
+    expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it.each(["null", JSON.stringify({ releaseRepo: "grzegorzrzeznikiewicz/orchestrator-board", version: "../../../../Untrivial-ai/agent-orchestrator/releases/download/v2.0.0", stagedAt: Date.now(), channel: "latest" })])("ignores malformed fork provenance without restoring a stage: %s", async contents => {
+    writeFileSync(nodePath.join(stateDir, "orchestrator-board-staged-update.json"), contents);
+    const { module } = await importAutoUpdater();
+    await expect(module.startAutoUpdates(stateDir)).resolves.toBeUndefined();
+    expect(module.getUpdateStatus().staged).toBeUndefined();
+  });
+
+  it("rejects a fork-namespaced stage that records a foreign repository", async () => {
+    const staged = nodePath.join(stateDir, "orchestrator-board-staged-update.json");
+    const contents = JSON.stringify({ releaseRepo: "Untrivial-ai/agent-orchestrator", version: "2.0.0", stagedAt: Date.now(), channel: "latest" });
+    writeFileSync(staged, contents);
+    const { module } = await importAutoUpdater();
+    await module.startAutoUpdates(stateDir);
+    expect(module.getUpdateStatus().staged).toBeUndefined();
+    expect(readFileSync(staged, "utf8")).toBe(contents);
+  });
+
+  it.each(["manual", "automatic", "return-home"])("fails closed on missing prerelease discovery for %s", async entry => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("missing", { status: 404 })));
+    const { module, autoUpdater } = await importAutoUpdater({ enabled: true, channel: "nightly", nightlyAck: true, feature: null });
+    if (entry === "manual") await module.checkForUpdatesNow(stateDir);
+    if (entry === "automatic") await module.startAutoUpdates(stateDir);
+    if (entry === "return-home") await module.returnToHome(stateDir);
+    expect(module.getUpdateStatus()).toMatchObject({ state: "error", message: expect.stringMatching(/no completed nightly/) });
+    expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not restore or delete legacy upstream staging", async () => {
+    const legacy = nodePath.join(stateDir, "staged-update.json");
+    const contents = JSON.stringify({ version: "2.0.0", stagedAt: Date.now(), channel: "latest" });
+    writeFileSync(legacy, contents);
+    const { module, autoUpdater } = await importAutoUpdater();
+    await module.startAutoUpdates(stateDir);
+    await expect(module.quitAndInstallUpdate()).rejects.toThrow(/not ready|configuration/i);
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    expect(readFileSync(legacy, "utf8")).toBe(contents);
+  });
 });
