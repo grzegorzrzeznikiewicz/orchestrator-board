@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -466,7 +468,9 @@ async function openCreateProjectDialog(
 	await user.click(screen.getByLabelText("New project"));
 	await user.click(screen.getByRole("button", { name: /^Open a local folder$/i }));
 	await screen.findByRole("dialog", { name: "Set up project" });
-	await chooseOption(screen.getByRole("combobox", { name: "Worker agent" }), "Codex");
+	expect(screen.getByRole("combobox", { name: "Review mode" })).toHaveValue("local");
+	expect(screen.getByRole("combobox", { name: "Worker agent" })).toBeDisabled();
+	expect(screen.getByRole("combobox", { name: "Worker agent" })).toHaveTextContent("Codex");
 	await chooseOption(screen.getByRole("combobox", { name: "Orchestrator agent" }), "Claude Code");
 	return user;
 }
@@ -1512,7 +1516,7 @@ describe("Sidebar", () => {
 		expect(screen.getByText("Project One").closest("button")).toHaveAttribute("aria-expanded", "true");
 	});
 
-	it("defaults worker and orchestrator agents when creating a project", async () => {
+	it("defaults new projects to local workflow with a Codex worker and Claude orchestrator", async () => {
 		const user = userEvent.setup();
 		const onCreateProject = vi.fn().mockResolvedValue(undefined) as CreateProjectHandler;
 		window.ao!.app.chooseDirectory = vi.fn().mockResolvedValue("/repo/new-project");
@@ -1533,7 +1537,8 @@ describe("Sidebar", () => {
 			expect(onCreateProject).toHaveBeenCalledWith(
 				expect.objectContaining({
 					path: "/repo/new-project",
-					workerAgent: "claude-code",
+					workerAgent: "codex",
+					reviewMode: "local",
 					orchestratorAgent: "claude-code",
 				}),
 			),
@@ -1587,7 +1592,8 @@ describe("Sidebar", () => {
 		await waitFor(() => expect(onCreateProject).toHaveBeenCalledWith(expect.objectContaining({
 			path: "/repo/web-app",
 			clonePreparationId: "prep-web-app",
-			workerAgent: "claude-code",
+			workerAgent: "codex",
+			reviewMode: "local",
 			orchestratorAgent: "claude-code",
 		})));
 		expect(onCloneProject).not.toHaveBeenCalled();
@@ -1638,7 +1644,8 @@ describe("Sidebar", () => {
 			expect(onCreateProject).toHaveBeenCalledWith(
 				expect.objectContaining({
 					path: "/repo/local-project",
-					workerAgent: "claude-code",
+					workerAgent: "codex",
+					reviewMode: "local",
 					orchestratorAgent: "claude-code",
 				}),
 			),
@@ -1646,7 +1653,7 @@ describe("Sidebar", () => {
 		expect(onCloneProject).not.toHaveBeenCalled();
 	});
 
-	it("prioritizes authorized project agents by preferred agent order", async () => {
+	it("prioritizes authorized agents by preferred order for the selected PR workflow", async () => {
 		const user = userEvent.setup();
 		const onCreateProject = vi.fn().mockResolvedValue(undefined) as CreateProjectHandler;
 		window.ao!.app.chooseDirectory = vi.fn().mockResolvedValue("/repo/new-project");
@@ -1667,6 +1674,7 @@ describe("Sidebar", () => {
 		await user.click(screen.getByLabelText("New project"));
 		await user.click(screen.getByRole("button", { name: /^Open a local folder$/i }));
 		expect(await screen.findByRole("dialog", { name: "Set up project" })).toBeInTheDocument();
+		await user.selectOptions(screen.getByRole("combobox", { name: "Review mode" }), "pr");
 		expect(screen.getByRole("combobox", { name: "Worker agent" })).toHaveTextContent(/cursor/i);
 		expect(screen.getByRole("combobox", { name: "Orchestrator agent" })).toHaveTextContent(/cursor/i);
 
@@ -1686,6 +1694,7 @@ describe("Sidebar", () => {
 			expect(onCreateProject).toHaveBeenCalledWith(
 				expect.objectContaining({
 					workerAgent: "cursor",
+					reviewMode: "pr",
 					orchestratorAgent: "cursor",
 				}),
 			),
@@ -1788,7 +1797,9 @@ describe("Sidebar", () => {
 		expect(window.ao!.app.chooseDirectory).toHaveBeenCalledWith("Choose a workspace folder");
 		await screen.findByRole("dialog", { name: "Import workspace" });
 		await user.click(screen.getByRole("button", { name: "Continue" }));
-		await chooseOption(screen.getByRole("combobox", { name: "Worker agent" }), "Codex");
+		expect(screen.getByRole("combobox", { name: "Review mode" })).toHaveValue("local");
+		expect(screen.getByRole("combobox", { name: "Worker agent" })).toBeDisabled();
+		expect(screen.getByRole("combobox", { name: "Worker agent" })).toHaveTextContent("Codex");
 		await chooseOption(screen.getByRole("combobox", { name: "Orchestrator agent" }), "Claude Code");
 		await user.click(screen.getByRole("button", { name: "Create workspace and start" }));
 
@@ -1796,6 +1807,7 @@ describe("Sidebar", () => {
 			expect(onCreateProject).toHaveBeenCalledWith({
 				path: "/repo/workspace",
 				workerAgent: "codex",
+				reviewMode: "local",
 				orchestratorAgent: "claude-code",
 				asWorkspace: true,
 			}),
@@ -2168,7 +2180,8 @@ describe("Sidebar", () => {
 		await waitFor(() =>
 			expect(onCreateProject).toHaveBeenCalledWith({
 				path: "/repo/new-project",
-				workerAgent: "claude-code",
+				workerAgent: "codex",
+				reviewMode: "local",
 				orchestratorAgent: "claude-code",
 				trackerIntake: undefined,
 				asWorkspace: false,

@@ -1,3 +1,4 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-9).
 package claudecode
 
 import (
@@ -98,6 +99,13 @@ func claudeConfigDir() string {
 // a provider can revoke a credential without changing anything on disk.
 func (p *Plugin) ValidateLaunchAuth(ctx context.Context, workingDir string, env map[string]string) (ports.AgentAuthStatus, error) {
 	return p.authStatusFor(ctx, workingDir, env, true)
+}
+
+// ValidateLaunchAuthWithDiagnostics retains native provider status for a fresh
+// exact-context recovery probe. The authored diagnostics contain no credentials.
+func (p *Plugin) ValidateLaunchAuthWithDiagnostics(ctx context.Context, workingDir string, env map[string]string) (ports.AgentAuthStatus, []domain.AgentAuthDiagnostic, error) {
+	status, _, steps, err := p.authStatusAndDiagnostics(ctx, workingDir, env, true)
+	return status, steps, err
 }
 
 func (p *Plugin) authStatusFor(ctx context.Context, workingDir string, env map[string]string, fresh bool) (ports.AgentAuthStatus, error) {

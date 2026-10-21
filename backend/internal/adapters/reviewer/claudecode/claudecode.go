@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package claudecode is the claude-code reviewer adapter. claude-code is a
 // prompt-driven agent, so this reviewer feeds AO's review prompt (authored
 // centrally and passed in ReviewInvocation.Prompt) to the worker claude-code
@@ -8,6 +10,7 @@ package claudecode
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,6 +40,19 @@ func (r *Reviewer) Harness() domain.ReviewerHarness {
 var _ ports.Reviewer = (*Reviewer)(nil)
 var _ ports.ReviewerCanceller = (*Reviewer)(nil)
 var _ ports.ReviewerRestorer = (*Reviewer)(nil)
+var _ ports.ReviewerLaunchAuthValidator = (*Reviewer)(nil)
+
+// ValidateReviewLaunchAuth forwards the exact review context without installing
+// hooks, starting a review, or trusting a local credential-presence cache.
+func (r *Reviewer) ValidateReviewLaunchAuth(ctx context.Context, cwd string, env map[string]string) (ports.AgentAuthStatus, []domain.AgentAuthDiagnostic, error) {
+	validator, ok := r.agent.(interface {
+		ValidateLaunchAuthWithDiagnostics(context.Context, string, map[string]string) (ports.AgentAuthStatus, []domain.AgentAuthDiagnostic, error)
+	})
+	if !ok {
+		return ports.AgentAuthStatusUnknown, nil, fmt.Errorf("%w: reviewer auth diagnostics unavailable", ports.ErrChatUnsupported)
+	}
+	return validator.ValidateLaunchAuthWithDiagnostics(ctx, cwd, env)
+}
 
 // reviewerAllowedTools is the read-only tool allowlist the reviewer launches
 // with. The reviewer runs headless (no human to approve prompts) but must stay

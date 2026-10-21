@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package store
 
 import (
@@ -1177,8 +1179,13 @@ func (s *Store) appendUserMessage(
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if reviewID == "" {
-		if err := checkLocalWorkflowWorkerAdmission(ctx, s.qw, session); err != nil {
-			return false, err
+		// Human intake is durable while verification still owns the workspace.
+		// Provider dispatch has its own fence; storing a queued message must not
+		// silently grant execution access to that workspace.
+		if msg.Origin != domain.MessageOriginHuman && !msg.AuthoredByUser {
+			if err := checkLocalWorkflowWorkerAdmission(ctx, s.qw, session); err != nil {
+				return false, err
+			}
 		}
 		if err := checkLocalWorkflowFixGeneration(ctx, s.qw, session, msg.ClientMessageID, generation); err != nil {
 			return false, err
@@ -1297,6 +1304,11 @@ func (s *Store) appendUserMessage(
 			}); err != nil {
 				return fmt.Errorf("record latest human message: %w", err)
 			}
+			if reviewID == "" && retryOfTurnID == "" {
+				if err := enqueueLocalWorkflowIntent(ctx, q, session, domain.LocalWorkflowIntent{RequestID: domain.LocalWorkflowRequestID("chat", conversationID+"\x00"+turnID), Prompt: msg.Text, TurnID: turnID, CreatedAt: interactionAt}); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
@@ -1328,6 +1340,22 @@ func (s *Store) ConversationMessageByClientID(
 // ConversationMessages returns the durable transcript in sequence order.
 func (s *Store) ConversationMessages(ctx context.Context, conversationID string) ([]domain.ConversationMessage, error) {
 	rows, err := s.qr.SelectConversationMessages(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	messages := make([]domain.ConversationMessage, 0, len(rows))
+	for _, row := range rows {
+		messages = append(messages, messageToDomain(row))
+	}
+	return messages, nil
+}
+
+// ConversationTurnOutput reads only settled assistant output of the requested
+// visible turn, retaining branch cutoffs and rollback/promotion filtering.
+func (s *Store) ConversationTurnOutput(ctx context.Context, conversationID, turnID string) ([]domain.ConversationMessage, error) {
+	rows, err := s.qr.SelectConversationTurnOutput(ctx, gen.SelectConversationTurnOutputParams{
+		ConversationID: conversationID, TurnID: nullableString(turnID),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -2747,7 +2775,7 @@ func (s *Store) UpsertActivity(
 		if seqErr != nil {
 			return fmt.Errorf("allocate sequence: %w", seqErr)
 		}
-		if err := recordSteerInteraction(ctx, q, conversationID, activity, now); err != nil {
+		if err := recordSteerInteraction(ctx, q, conversationID, providerTurnID, activity, now); err != nil {
 			return err
 		}
 		return q.InsertConversationActivity(ctx, gen.InsertConversationActivityParams{

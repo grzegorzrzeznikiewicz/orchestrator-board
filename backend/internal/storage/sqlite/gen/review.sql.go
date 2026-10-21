@@ -1229,6 +1229,7 @@ func (q *Queries) UpdateReviewRunResult(ctx context.Context, arg UpdateReviewRun
 }
 
 const upsertReview = `-- name: UpsertReview :exec
+
 INSERT INTO review (id, session_id, project_id, harness, pr_url, reviewer_handle_id, agent_session_id, reviewer_activity_state, reviewer_launch_id, interface_mode, provider_conversation_id, controller_generation, controller_error, is_archived, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (session_id, harness) DO UPDATE SET
@@ -1265,6 +1266,7 @@ type UpsertReviewParams struct {
 	UpdatedAt              time.Time
 }
 
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
 func (q *Queries) UpsertReview(ctx context.Context, arg UpsertReviewParams) error {
 	_, err := q.db.ExecContext(ctx, upsertReview,
 		arg.ID,

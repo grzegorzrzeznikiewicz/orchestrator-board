@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package lifecycle implements the synchronous reducer that writes durable
 // session lifecycle facts. It deliberately keeps the session model small:
 // activity_state plus an is_terminated bit are the only persisted status-like
@@ -597,6 +599,7 @@ func (m *Manager) ApplyActivitySignal(ctx context.Context, id domain.SessionID, 
 	// unrelated message into a hard native-history checkpoint. Missing event
 	// provenance is untrusted as well: these text fields and Event were introduced
 	// together on AO's activity wire contract.
+	var localWorkflowIntent *domain.LocalWorkflowIntent
 	switch s.Event {
 	case "user-prompt-submit":
 		s.LatestAssistantUpdate = ""
@@ -660,6 +663,7 @@ func (m *Manager) ApplyActivitySignal(ctx context.Context, id domain.SessionID, 
 	projectionAttempts := 0
 	originalSignal := s
 retryProjection:
+	localWorkflowIntent = nil
 	s = originalSignal
 	rec, ok, err := m.store.GetSession(ctx, id)
 	if err != nil {
@@ -846,6 +850,14 @@ retryProjection:
 				// untrusted. It must not be upgraded by a later Stop.
 				checkpoint.ConversationCheckpointState = domain.ConversationCheckpointLegacy
 			}
+			boundaryID := s.ProviderTurnID
+			if rec.Harness == domain.HarnessClaudeCode || boundaryID == "" {
+				boundaryID = s.SubmissionID
+			}
+			if mode == domain.SessionModeTUI && s.ConversationCheckpointOrigin == domain.ConversationCheckpointOriginHuman &&
+				s.SubagentID == "" && ownerGeneration != "" && checkpointNativeID != "" && boundaryID != "" && strings.TrimSpace(s.LatestUserPrompt) != "" {
+				localWorkflowIntent = &domain.LocalWorkflowIntent{RequestID: domain.LocalWorkflowRequestID("tui", ownerGeneration+"\x00"+checkpointNativeID+"\x00"+boundaryID), Prompt: s.LatestUserPrompt, TurnID: boundaryID, CreatedAt: promptAt}
+			}
 		}
 	case "stop":
 		if claudeNativeBoundary {
@@ -962,6 +974,7 @@ retryProjection:
 	stepsBeforeProjection := m.stepsSnapshotLocked(id)
 	m.recordStepLocked(id, s, now)
 	project := func(next domain.SessionRecord) (applied, retry bool, err error) {
+		next.LocalWorkflowIntent = localWorkflowIntent
 		applied, err = m.store.UpdateSessionFromActivitySignal(ctx, next, observedRevision)
 		if applied {
 			return applied, false, err

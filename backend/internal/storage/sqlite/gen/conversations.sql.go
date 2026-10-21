@@ -857,6 +857,7 @@ type InsertConversationParams struct {
 	UpdatedAt        time.Time
 }
 
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-10).
 // Chat conversation storage.
 //
 // Ordering has a single writer: NextConversationSequence bumps and returns
@@ -3214,6 +3215,89 @@ func (q *Queries) SelectConversationTurnByProviderID(ctx context.Context, arg Se
 		&i.HandledByReviewID,
 	)
 	return i, err
+}
+
+const selectConversationTurnOutput = `-- name: SelectConversationTurnOutput :many
+WITH RECURSIVE active_path(branch_id, max_sequence) AS (
+    SELECT conversations.active_branch_id, CAST(NULL AS INTEGER)
+    FROM conversations
+    WHERE conversations.id = ?1
+    UNION ALL
+    SELECT branch.parent_branch_id,
+           CASE
+               WHEN path.max_sequence IS NULL THEN branch.fork_after_sequence
+               WHEN branch.fork_after_sequence < path.max_sequence THEN branch.fork_after_sequence
+               ELSE path.max_sequence
+           END
+    FROM active_path AS path
+    JOIN conversation_branches AS branch ON branch.id = path.branch_id
+    WHERE branch.parent_branch_id IS NOT NULL
+)
+SELECT conversation_messages.id, conversation_messages.conversation_id, conversation_messages.turn_id, conversation_messages.sequence, conversation_messages.revision, conversation_messages.role, conversation_messages.origin, conversation_messages.text, conversation_messages.streaming, conversation_messages.provider_item_id, conversation_messages.client_message_id, conversation_messages.created_at, conversation_messages.updated_at, conversation_messages.delivery_content_json, conversation_messages.branch_id, conversation_messages.client_payload_hash, conversation_messages.sender_session_id, conversation_messages.sender_project_id, conversation_messages.sender_display_name FROM conversation_messages
+JOIN active_path AS path ON path.branch_id = conversation_messages.branch_id
+WHERE conversation_messages.conversation_id = ?1
+  AND conversation_messages.turn_id = ?2
+  AND conversation_messages.role = 'assistant'
+  AND conversation_messages.streaming = 0
+  AND (path.max_sequence IS NULL OR conversation_messages.sequence <= path.max_sequence)
+  AND (conversation_messages.turn_id IS NULL OR conversation_messages.turn_id NOT IN (
+      SELECT discarded.id FROM conversation_turns AS discarded
+      WHERE discarded.conversation_id = ?1
+        AND (
+          discarded.rolled_back_at IS NOT NULL
+          OR discarded.promoted_to_turn_id IS NOT NULL
+          OR discarded.state = 'cancelled'
+        )
+  ))
+ORDER BY conversation_messages.sequence
+`
+
+type SelectConversationTurnOutputParams struct {
+	ConversationID string
+	TurnID         sql.NullString
+}
+
+func (q *Queries) SelectConversationTurnOutput(ctx context.Context, arg SelectConversationTurnOutputParams) ([]ConversationMessage, error) {
+	rows, err := q.db.QueryContext(ctx, selectConversationTurnOutput, arg.ConversationID, arg.TurnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConversationMessage{}
+	for rows.Next() {
+		var i ConversationMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.TurnID,
+			&i.Sequence,
+			&i.Revision,
+			&i.Role,
+			&i.Origin,
+			&i.Text,
+			&i.Streaming,
+			&i.ProviderItemID,
+			&i.ClientMessageID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeliveryContentJson,
+			&i.BranchID,
+			&i.ClientPayloadHash,
+			&i.SenderSessionID,
+			&i.SenderProjectID,
+			&i.SenderDisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const selectConversationTurns = `-- name: SelectConversationTurns :many

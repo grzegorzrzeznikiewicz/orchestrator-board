@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package sqlite
 
 import (
@@ -205,6 +207,7 @@ var shippedMigrations = map[int64]string{
 	200: "0200_local_review_result.sql",
 	201: "0201_local_workflow.sql",
 	202: "0202_local_workflow_decision.sql",
+	203: "0203_local_workflow_intent.sql",
 }
 
 // burnedVersion reports version numbers that must never be (re)used: they

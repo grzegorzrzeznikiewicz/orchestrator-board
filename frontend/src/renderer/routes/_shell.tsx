@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { useWindowZoomFactor } from "../hooks/useWindowZoomFactor";
 import { AppBrowserLinkContext } from "../components/AppLink";
 import { useSessionBrowserLink } from "../hooks/useSessionBrowserLink";
@@ -193,16 +195,20 @@ function findRegisteredWorkspaceByPath(workspaces: WorkspaceSummary[], path: str
 }
 
 type CreateProjectConfigInput = {
+	reviewMode?: "local" | "pr";
 	workerAgent: string;
 	orchestratorAgent: string;
 	trackerIntake?: components["schemas"]["TrackerIntakeConfig"];
 	defaultBranch?: string;
 };
 
-export function createProjectConfig(input: CreateProjectConfigInput): components["schemas"]["ProjectConfig"] {
+export function createProjectConfig(input: CreateProjectConfigInput, scope: "local" | "remote" = "local"): components["schemas"]["ProjectConfig"] {
+	const reviewMode = scope === "local" ? input.reviewMode ?? "local" : undefined;
 	return {
+		...(reviewMode ? { reviewMode } : {}),
+		...(reviewMode === "local" ? { reviewers: [{ harness: "claude-code" as const }], autoReview: false, workersRequestReview: false } : {}),
 		...(input.defaultBranch ? { defaultBranch: input.defaultBranch } : {}),
-		worker: { agent: input.workerAgent as components["schemas"]["RoleOverride"]["agent"] },
+		worker: { agent: reviewMode === "local" ? "codex" : input.workerAgent as components["schemas"]["RoleOverride"]["agent"] },
 		orchestrator: { agent: input.orchestratorAgent as components["schemas"]["RoleOverride"]["agent"] },
 		...(input.trackerIntake ? { trackerIntake: input.trackerIntake } : {}),
 	};
@@ -697,6 +703,7 @@ function ShellLayout() {
 				kind: toProjectKind(project.kind),
 				path: project.path,
 				workspaceRepos: project.workspaceRepos,
+				reviewMode: project.config?.reviewMode ?? input.reviewMode ?? "local",
 				type: "main",
 				orchestratorAgent: input.orchestratorAgent as WorkspaceSummary["orchestratorAgent"],
 				sessions: [],
@@ -716,6 +723,7 @@ function ShellLayout() {
 	const createProject = useCallback(
 		async (input: {
 			path: string;
+			reviewMode?: "local" | "pr";
 			workerAgent: string;
 			orchestratorAgent: string;
 			trackerIntake?: components["schemas"]["TrackerIntakeConfig"];
@@ -794,6 +802,7 @@ function ShellLayout() {
 		async (input: {
 			remoteUrl: string;
 			destinationParent: string;
+			reviewMode?: "local" | "pr";
 			workerAgent: string;
 			orchestratorAgent: string;
 			trackerIntake?: components["schemas"]["TrackerIntakeConfig"];
@@ -857,7 +866,7 @@ function ShellLayout() {
 			path: input.path,
 			asWorkspace: input.asWorkspace || undefined,
 			clonePreparationId: input.clonePreparationId,
-			config: createProjectConfig(input),
+			config: createProjectConfig(input, "remote"),
 		} });
 		if (error || !data?.project) throw Object.assign(new Error(apiErrorMessage(error, "Could not add project on this host.")), { code: apiErrorCode(error) });
 		const projectId = data.project.id;

@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package store
 
 import (
@@ -125,7 +127,15 @@ func (s *Store) createSessionLocked(ctx context.Context, rec domain.SessionRecor
 		}
 		num++
 	}
-	if err := s.qw.InsertSession(ctx, recordToInsert(rec, num)); err != nil {
+	if err := s.inTx(ctx, "create session and local workflow intent", func(q *gen.Queries) error {
+		if err := q.InsertSession(ctx, recordToInsert(rec, num)); err != nil {
+			return err
+		}
+		if rec.LocalWorkflowIntent != nil {
+			return enqueueLocalWorkflowIntent(ctx, q, rec.ID, *rec.LocalWorkflowIntent)
+		}
+		return nil
+	}); err != nil {
 		if rec.ClientRequestID != "" {
 			existing, found, reloadErr := s.getSessionByClientRequestID(ctx, s.qw, rec.ClientRequestID)
 			if reloadErr == nil && found {
@@ -140,6 +150,7 @@ func (s *Store) createSessionLocked(ctx context.Context, rec domain.SessionRecor
 		}
 		return domain.SessionRecord{}, false, fmt.Errorf("insert session %s: %w", rec.ID, err)
 	}
+	rec.LocalWorkflowIntent = nil
 	return rec, true, nil
 }
 
@@ -254,27 +265,38 @@ func (s *Store) PromoteTaskPreparation(ctx context.Context, id domain.SessionID,
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	activity := normalActivity(rec.Activity, rec.UpdatedAt)
-	rows, err := s.qw.PromoteTaskPreparation(ctx, gen.PromoteTaskPreparationParams{
-		IssueID:            rec.IssueID,
-		Kind:               rec.Kind,
-		Harness:            rec.Harness,
-		AutoReviewEnabled:  rec.AutoReviewEnabled,
-		DisplayName:        rec.DisplayName,
-		ActivityState:      activity.State,
-		ActivityLastAt:     activity.LastActivityAt,
-		SessionMode:        domain.NormalizeSessionMode(rec.Mode),
-		Model:              rec.Metadata.Model,
-		Effort:             rec.Metadata.Effort,
-		SessionPermissions: string(rec.Metadata.Permissions),
-		RequestedOutput:    string(rec.RequestedOutput),
-		CreatedAt:          rec.CreatedAt,
-		UpdatedAt:          rec.UpdatedAt,
-		AutoInjectReview:   rec.AutoInjectReview,
-		AutoInjectCI:       rec.AutoInjectCI,
-		ProvisionState:     rec.ProvisionState.WithDefault(),
-		ClientRequestID:    rec.ClientRequestID,
-		ClientRequestHash:  rec.ClientRequestHash,
-		ID:                 id,
+	var rows int64
+	err := s.inTx(ctx, "promote task and local workflow intent", func(q *gen.Queries) error {
+		var err error
+		rows, err = q.PromoteTaskPreparation(ctx, gen.PromoteTaskPreparationParams{
+			IssueID:            rec.IssueID,
+			Kind:               rec.Kind,
+			Harness:            rec.Harness,
+			AutoReviewEnabled:  rec.AutoReviewEnabled,
+			DisplayName:        rec.DisplayName,
+			ActivityState:      activity.State,
+			ActivityLastAt:     activity.LastActivityAt,
+			SessionMode:        domain.NormalizeSessionMode(rec.Mode),
+			Model:              rec.Metadata.Model,
+			Effort:             rec.Metadata.Effort,
+			SessionPermissions: string(rec.Metadata.Permissions),
+			RequestedOutput:    string(rec.RequestedOutput),
+			CreatedAt:          rec.CreatedAt,
+			UpdatedAt:          rec.UpdatedAt,
+			AutoInjectReview:   rec.AutoInjectReview,
+			AutoInjectCI:       rec.AutoInjectCI,
+			ProvisionState:     rec.ProvisionState.WithDefault(),
+			ClientRequestID:    rec.ClientRequestID,
+			ClientRequestHash:  rec.ClientRequestHash,
+			ID:                 id,
+		})
+		if err != nil || rows == 0 {
+			return err
+		}
+		if rec.LocalWorkflowIntent != nil {
+			return enqueueLocalWorkflowIntent(ctx, q, id, *rec.LocalWorkflowIntent)
+		}
+		return nil
 	})
 	if err != nil {
 		return false, fmt.Errorf("promote task preparation %s: %w", id, err)
@@ -411,7 +433,7 @@ func (s *Store) UpdateSessionFromActivitySignal(
 	activity := normalActivity(rec.Activity, rec.UpdatedAt)
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	rows, err := s.qw.UpdateSessionFromActivitySignal(ctx, gen.UpdateSessionFromActivitySignalParams{
+	params := gen.UpdateSessionFromActivitySignalParams{
 		ActivityState:                    activity.State,
 		ActivityLastAt:                   activity.LastActivityAt,
 		FirstSignalAt:                    timeToNullTime(rec.FirstSignalAt),
@@ -438,7 +460,20 @@ func (s *Store) UpdateSessionFromActivitySignal(
 		ExpectedSessionMode:              domain.NormalizeSessionMode(rec.Mode),
 		ExpectedRuntimeLaunchID:          rec.Metadata.RuntimeLaunchID,
 		ExpectedControllerGeneration:     rec.Metadata.ControllerGeneration,
-	})
+	}
+	var rows int64
+	var err error
+	if rec.LocalWorkflowIntent == nil {
+		rows, err = s.qw.UpdateSessionFromActivitySignal(ctx, params)
+	} else {
+		err = s.inTx(ctx, "project activity and local workflow intent", func(q *gen.Queries) error {
+			rows, err = q.UpdateSessionFromActivitySignal(ctx, params)
+			if err != nil || rows == 0 {
+				return err
+			}
+			return enqueueLocalWorkflowIntent(ctx, q, rec.ID, *rec.LocalWorkflowIntent)
+		})
+	}
 	if err != nil {
 		return false, fmt.Errorf("update session %s from activity signal: %w", rec.ID, err)
 	}

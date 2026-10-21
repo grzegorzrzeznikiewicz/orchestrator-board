@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { aoBridge } from "./bridge";
 import { getApiBaseUrl, hasTrustedApiBaseUrl, subscribeApiBaseUrl } from "./api-client";
@@ -64,6 +66,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 			const pendingConversationSessions = new Set<string>();
 			const pendingReviewerConversations = new Set<string>();
 			const pendingReviewSessions = new Set<string>();
+			const pendingLocalWorkflowSessions = new Set<string>();
 			const pendingInterfaceTransitionSessions = new Set<string>();
 			const pendingEditorHandoffSessions = new Set<string>();
 			const pendingModelCatalogScopes = new Map<string, { agentId: string; projectId: string }>();
@@ -117,9 +120,10 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 			// Do not repeatedly cancel a slow fetch under continuous CDC traffic. A
 			// key receives at most one in-flight refresh and one queued catch-up.
 			const refreshes = new Map<string, { dirty: boolean }>();
-			const invalidate = (queryKey: QueryKey) => {
+			const invalidate = (queryKey: QueryKey, workflowSessionId?: string) => {
 				if (disposed) return;
-				const key = JSON.stringify(queryKey);
+				const key = JSON.stringify([queryKey, workflowSessionId]);
+				const predicate = workflowSessionId ? (query: { queryKey: QueryKey }) => Array.isArray(query.queryKey[2]) && query.queryKey[2].includes(workflowSessionId) : undefined;
 				const running = refreshes.get(key);
 				if (running) {
 					running.dirty = true;
@@ -127,7 +131,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 				}
 				// A fetch from polling/mounting may already predate this event. Wait
 				// for it, then refresh once so joining its promise cannot lose the event.
-				const state = { dirty: queryClient.isFetching({ queryKey, type: "active" }) > 0 };
+				const state = { dirty: queryClient.isFetching({ queryKey, type: "active", predicate }) > 0 };
 				// An inactive Chat hover prefetch cannot refresh itself after this event.
 				// Cancel it without interrupting unrelated imperative queries.
 				if (queryKey[0] === conversationQueryRoot[0] && queryClient.isFetching({ queryKey, type: "inactive" }) > 0) {
@@ -136,13 +140,16 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 				refreshes.set(key, state);
 				const settled = () => {
 					refreshes.delete(key);
-					if (state.dirty && !disposed) invalidate(queryKey);
+					if (state.dirty && !disposed) invalidate(queryKey, workflowSessionId);
 				};
-				void queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false }).then(settled, settled);
+				void queryClient.invalidateQueries({ queryKey, ...(predicate ? { predicate } : {}) }, { cancelRefetch: false }).then(settled, settled);
 			};
 			const refreshRemote = (hostId: string, reconnect = false) => {
 				invalidate(["remote-workspaces", hostId]);
-				invalidate(["remote-local-workflow",hostId]);
+				if (reconnect) {
+					invalidate(["remote-local-workflow", hostId]);
+					invalidate(["local-workflow-summaries", hostId]);
+				}
 				invalidate(["project", hostId]);
 				invalidate(["project-config", hostId]);
 				if (reconnect) invalidate(["remote-conversation", hostId]);
@@ -177,6 +184,10 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 						if (!("data" in event)) return;
 						try {
 							const decoded = JSON.parse(String((event as MessageEvent).data)) as { sessionId?: unknown; payload?: { conversationId?: unknown; reviewId?: unknown } };
+							if (typeof decoded.sessionId === "string" && typeof decoded.payload?.conversationId !== "string") {
+								invalidate(["remote-local-workflow", hostId, decoded.sessionId]);
+								invalidate(["local-workflow-summaries", hostId], decoded.sessionId);
+							}
 							if (typeof decoded.sessionId === "string" && typeof decoded.payload?.conversationId === "string" && typeof decoded.payload.reviewId !== "string") {
 								refreshRemoteConversationOnce(hostId, decoded.sessionId);
 							}
@@ -233,13 +244,14 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 				}
 				if (workspaceInvalidationPending) {
 					invalidate(workspaceQueryKey);
-					invalidate(["local-workflow"]);
 					invalidate(agentSwitchesQueryRoot);
 					invalidate(sessionScmSummaryQueryKey());
 					invalidate(sessionUsageQueryRoot);
 					workspaceInvalidationPending = false;
 				}
 				if (allEventScopedCachesInvalidationPending) {
+					invalidate(["local-workflow"]);
+					invalidate(["local-workflow-summaries", "local"]);
 					invalidate(["session-reviews"]);
 					invalidate(["session-interface-transition"]);
 					invalidate(["agent-models"]);
@@ -259,6 +271,11 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 					invalidate(conversationQueryKey(sessionId));
 				}
 				pendingConversationSessions.clear();
+				for (const sessionId of pendingLocalWorkflowSessions) {
+					invalidate(["local-workflow", sessionId]);
+					invalidate(["local-workflow-summaries", "local"], sessionId);
+				}
+				pendingLocalWorkflowSessions.clear();
 				for (const sessionId of pendingReviewSessions) {
 					invalidate(sessionReviewsQueryKey(sessionId));
 				}
@@ -368,6 +385,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 							typeof payload?.conversationId !== "string" &&
 							typeof payload?.interfaceTransitionId !== "string"
 						) {
+							pendingLocalWorkflowSessions.add(decoded.sessionId);
 							// Async chat startup changes the session's provisionState, but
 							// does not emit a conversationId. Refresh the open conversation
 							// so its controller state can leave "connecting".
@@ -544,6 +562,7 @@ export function createEventTransport(queryClient: QueryClient): EventTransport {
 				if (refreshTimer !== undefined) clearTimeout(refreshTimer);
 				pendingConversationSessions.clear();
 				pendingReviewSessions.clear();
+				pendingLocalWorkflowSessions.clear();
 				pendingInterfaceTransitionSessions.clear();
 				pendingModelCatalogScopes.clear();
 				refreshes.clear();

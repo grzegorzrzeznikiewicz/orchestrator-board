@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -91,7 +93,7 @@ func TestWorkerInitialFailureIsNotSuccessfulIdle(t *testing.T) {
 	}
 }
 
-func (d *workerDispatch) CancelQueuedTurn(_ context.Context, _ domain.SessionID, turnID string) error {
+func (d *workerDispatch) CancelWorkflowTurn(_ context.Context, _ domain.SessionID, turnID string) error {
 	if turnID != d.store.turn.ID {
 		return fmt.Errorf("wrong turn")
 	}

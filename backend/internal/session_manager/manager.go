@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package sessionmanager drives internal session command operations over runtime,
 // agent, workspace, storage, messenger, and lifecycle dependencies.
 package sessionmanager
@@ -5261,7 +5263,7 @@ func normalizeWorkspacePath(p string) string {
 // ---- helpers ----
 
 func seedRecord(cfg ports.SpawnConfig, projectConfig domain.ProjectConfig, now time.Time) domain.SessionRecord {
-	return domain.SessionRecord{
+	rec := domain.SessionRecord{
 		ProjectID:         cfg.ProjectID,
 		IssueID:           cfg.IssueID,
 		AutomationRunID:   cfg.AutomationRunID,
@@ -5283,6 +5285,19 @@ func seedRecord(cfg ports.SpawnConfig, projectConfig domain.ProjectConfig, now t
 		AutoInjectReview:  true,
 		AutoInjectCI:      true,
 	}
+	// Chat commits its opening intent with the durable queued human turn. A TUI
+	// needs an explicit launch intent before a provider/controller exists; its
+	// first canonical human submit replaces this unbound request atomically.
+	prompt := strings.TrimSpace(cfg.Prompt)
+	if prompt == "" {
+		prompt = strings.TrimSpace(cfg.IssueContext)
+	}
+	if cfg.ProjectID != "" && cfg.Kind == domain.KindWorker &&
+		domain.NormalizeSessionMode(cfg.RequestedMode) == domain.SessionModeTUI &&
+		projectConfig.EffectiveReviewMode() == domain.ReviewTargetLocal && prompt != "" {
+		rec.LocalWorkflowIntent = &domain.LocalWorkflowIntent{RequestID: "spawn:" + uuid.NewString(), Prompt: prompt, CreatedAt: now}
+	}
+	return rec
 }
 
 func defaultSessionBranch(id domain.SessionID, kind domain.SessionKind, prefix, branchNamespace string) string {

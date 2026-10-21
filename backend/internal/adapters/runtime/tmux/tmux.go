@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package tmux implements ports.Runtime using tmux sessions on Darwin/Linux.
 package tmux
 
@@ -80,6 +82,7 @@ type Runtime struct {
 }
 
 var _ ports.Runtime = (*Runtime)(nil)
+var _ ports.ManagedRuntimeDestroyer = (*Runtime)(nil)
 var _ ports.FencedRuntimeProber = (*Runtime)(nil)
 var _ ports.Attacher = (*Runtime)(nil)
 
@@ -510,6 +513,25 @@ func (r *Runtime) verifyPaneWorkingDirectory(ctx context.Context, id, want strin
 // teardown and, after kill-session, signals the whole session (see
 // killSessionsByPID). An already-gone session is treated as success (idempotent).
 func (r *Runtime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error {
+	return r.destroy(ctx, handle, r.runForSession, r.forgetSessionSocket)
+}
+
+// DestroyManaged cleans up only the private socket used by Create. In
+// particular, an absent private reviewer pane must not trigger legacy session
+// discovery: a same-named user session is outside this operation's ownership.
+func (r *Runtime) DestroyManaged(ctx context.Context, handle ports.RuntimeHandle) error {
+	if r.socketName == "" {
+		return fmt.Errorf("tmux runtime: managed cleanup requires a private socket: %w", ports.ErrManagedRuntimeUnsupported)
+	}
+	run := func(ctx context.Context, _ string, args ...string) ([]byte, error) {
+		return r.runOnSocket(ctx, r.socketName, args...)
+	}
+	// Do not change the shared routing cache: it may identify a separate legacy
+	// session with this ID, including while another operation is using it.
+	return r.destroy(ctx, handle, run, nil)
+}
+
+func (r *Runtime) destroy(ctx context.Context, handle ports.RuntimeHandle, run func(context.Context, string, ...string) ([]byte, error), forget func(string)) error {
 	id, err := handleID(handle)
 	if err != nil {
 		return err
@@ -517,7 +539,7 @@ func (r *Runtime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error
 	// Capture pane session ids while the session still exists; a missing
 	// session lists no panes and reaps nothing. Best-effort: failures here must
 	// not block the kill-session below.
-	sessionIDs := r.paneSessionIDs(ctx, id)
+	sessionIDs := paneSessionIDs(ctx, id, run)
 
 	// Re-assert detach-on-destroy immediately before kill-session too. This is
 	// belt-and-suspenders alongside enforceDetachOnDestroy (which now covers
@@ -529,11 +551,11 @@ func (r *Runtime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error
 	// must not run while the guard is unconfirmed, because a session that dies
 	// with detach-on-destroy still off can hand AO's terminal, and its input,
 	// to one of the user's own sessions (issue #4223).
-	if out, setErr := r.runForSession(ctx, id, setDetachOnDestroyOnArgs(id)...); setErr != nil && !confirmedAbsentOutput(setErr, string(out)) {
+	if out, setErr := run(ctx, id, setDetachOnDestroyOnArgs(id)...); setErr != nil && !confirmedAbsentOutput(setErr, string(out)) {
 		return fmt.Errorf("tmux runtime: set detach-on-destroy %s: %w", id, setErr)
 	}
 
-	out, err := r.runForSession(ctx, id, killSessionArgs(id)...)
+	out, err := run(ctx, id, killSessionArgs(id)...)
 	// Reap regardless of the kill-session result: orphaned children outlive the
 	// session, so they must be cleaned up even when the session was already
 	// gone (a benign double-kill).
@@ -551,12 +573,16 @@ func (r *Runtime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error
 		// retryable: a caller that calls Destroy again finds the same cached
 		// socket rather than re-running discovery from scratch.
 		if confirmedAbsentOutput(err, string(out)) {
-			r.forgetSessionSocket(id)
+			if forget != nil {
+				forget(id)
+			}
 			return nil
 		}
 		return fmt.Errorf("tmux runtime: destroy session %s: %w", id, err)
 	}
-	r.forgetSessionSocket(id)
+	if forget != nil {
+		forget(id)
+	}
 	return nil
 }
 
@@ -565,8 +591,8 @@ func (r *Runtime) Destroy(ctx context.Context, handle ports.RuntimeHandle) error
 // the handle killSessionsByPID uses to reap the pane's descendants. Best-effort:
 // any error (including a missing session) or unparseable line yields no ids,
 // and pids <= 1 are skipped so we never signal init or the "current session".
-func (r *Runtime) paneSessionIDs(ctx context.Context, id string) []int {
-	out, err := r.runForSession(ctx, id, listPanePIDsArgs(id)...)
+func paneSessionIDs(ctx context.Context, id string, run func(context.Context, string, ...string) ([]byte, error)) []int {
+	out, err := run(ctx, id, listPanePIDsArgs(id)...)
 	if err != nil {
 		return nil
 	}

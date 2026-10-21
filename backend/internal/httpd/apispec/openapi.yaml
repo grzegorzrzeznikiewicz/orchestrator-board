@@ -2198,6 +2198,61 @@ paths:
       summary: Fetch link-preview metadata (Open Graph) for an external URL
       tags:
       - link-preview
+  /api/v1/local-workflow/summaries:
+    get:
+      operationId: getLocalWorkflowSummaries
+      parameters:
+      - in: query
+        name: sessionIds
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalWorkflowSummariesResponse'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Conflict
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Internal Server Error
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: Read bounded local workflow display cards
+      tags:
+      - reviews
   /api/v1/mobile/devices:
     get:
       operationId: listMobileDevices
@@ -15281,6 +15336,128 @@ components:
       - summary
       - findings
       type: object
+    LocalVerificationPlan:
+      properties:
+        checks:
+          items:
+            type: string
+          type: array
+        commands:
+          items:
+            type: string
+          type: array
+        profile:
+          enum:
+          - implementation
+          - report
+          type: string
+        rationale:
+          type: string
+      required:
+      - profile
+      - rationale
+      - commands
+      - checks
+      type: object
+    LocalWorkflowAutomationState:
+      properties:
+        blockMessage:
+          type: string
+        pending:
+          type: boolean
+      required:
+      - pending
+      type: object
+    LocalWorkflowCardRun:
+      properties:
+        automatic:
+          type: boolean
+        blockCode:
+          type: string
+        blockMessage:
+          type: string
+        cycle:
+          type: integer
+        id:
+          type: string
+        maxRounds:
+          type: integer
+        phase:
+          enum:
+          - waiting_executor
+          - testing
+          - reviewing
+          - fixing
+          - ready
+          - blocked
+          - stopping
+          - stopped
+          type: string
+        planState:
+          type: string
+        profile:
+          type: string
+        providerRetry:
+          $ref: '#/components/schemas/LocalWorkflowProviderRetry'
+        version:
+          format: int64
+          type: integer
+      required:
+      - id
+      - version
+      - phase
+      - cycle
+      - maxRounds
+      type: object
+    LocalWorkflowCardSummary:
+      properties:
+        accepted:
+          type: boolean
+        automation:
+          $ref: '#/components/schemas/LocalWorkflowAutomationState'
+        current:
+          type: boolean
+        requiredCount:
+          type: integer
+        requiredReason:
+          type: string
+        run:
+          anyOf:
+          - type: "null"
+          - $ref: '#/components/schemas/LocalWorkflowCardRun'
+            type: object
+        sessionId:
+          type: string
+        stage:
+          enum:
+          - executing
+          - testing
+          - local_review
+          - fixing
+          - awaiting_acceptance
+          - accepted
+          type: string
+        testsPassed:
+          type: integer
+        testsPresent:
+          type: boolean
+        testsQueued:
+          type: boolean
+        testsTotal:
+          type: integer
+      required:
+      - sessionId
+      - run
+      - stage
+      - current
+      - accepted
+      - automation
+      - testsPresent
+      - testsPassed
+      - testsTotal
+      - testsQueued
+      - requiredCount
+      type: object
     LocalWorkflowDecision:
       properties:
         comment:
@@ -15382,10 +15559,64 @@ components:
       - state
       - startedAt
       type: object
+    LocalWorkflowProviderRetry:
+      properties:
+        attempt:
+          type: integer
+        attemptId:
+          type: string
+        contextId:
+          type: string
+        failureAt:
+          format: date-time
+          type: string
+        lastAt:
+          format: date-time
+          type:
+          - "null"
+          - string
+        maxAttempts:
+          type: integer
+        nextAt:
+          format: date-time
+          type:
+          - "null"
+          - string
+        operationId:
+          type: string
+        reason:
+          enum:
+          - authentication
+          - rate_limited
+          - unavailable
+          type: string
+        stage:
+          enum:
+          - planner
+          - review
+          type: string
+        state:
+          enum:
+          - waiting
+          - checking
+          - recovered
+          - exhausted
+          - uncertain
+          type: string
+      required:
+      - stage
+      - state
+      - reason
+      - attempt
+      - maxAttempts
+      - failureAt
+      type: object
     LocalWorkflowResponse:
       properties:
         accepted:
           type: boolean
+        automation:
+          $ref: '#/components/schemas/LocalWorkflowAutomationState'
         current:
           type: boolean
         decisions:
@@ -15395,6 +15626,10 @@ components:
         operations:
           items:
             $ref: '#/components/schemas/LocalWorkflowOperation'
+          type: array
+        previousRuns:
+          items:
+            $ref: '#/components/schemas/LocalWorkflowRun'
           type: array
         requiredFindings:
           items:
@@ -15408,7 +15643,6 @@ components:
           anyOf:
           - type: "null"
           - $ref: '#/components/schemas/LocalWorkflowRun'
-            type: object
         stage:
           enum:
           - executing
@@ -15435,6 +15669,8 @@ components:
       type: object
     LocalWorkflowRun:
       properties:
+        automatic:
+          type: boolean
         blockCode:
           type: string
         blockMessage:
@@ -15464,6 +15700,10 @@ components:
           - stopping
           - stopped
           type: string
+        planState:
+          type: string
+        providerRetry:
+          $ref: '#/components/schemas/LocalWorkflowProviderRetry'
         sessionId:
           type: string
         stopRequested:
@@ -15475,6 +15715,8 @@ components:
         updatedAt:
           format: date-time
           type: string
+        verificationPlan:
+          $ref: '#/components/schemas/LocalVerificationPlan'
         version:
           format: int64
           type: integer
@@ -15489,6 +15731,15 @@ components:
       - stopRequested
       - createdAt
       - updatedAt
+      type: object
+    LocalWorkflowSummariesResponse:
+      properties:
+        summaries:
+          items:
+            $ref: '#/components/schemas/LocalWorkflowCardSummary'
+          type: array
+      required:
+      - summaries
       type: object
     LocalWorkflowTestLogResponse:
       properties:

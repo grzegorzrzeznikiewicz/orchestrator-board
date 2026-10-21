@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package domain
 
 import (
@@ -15,27 +17,32 @@ var (
 // LocalWorkflowRun records execution facts, not the session's display status.
 // Private configuration is deliberately excluded from public JSON responses.
 type LocalWorkflowRun struct {
-	VerificationAfterTurnID string             `json:"-"`
-	ReviewerConfig          AgentConfig        `json:"-"`
-	ID                      string             `json:"id"`
-	SessionID               SessionID          `json:"sessionId"`
-	RequestID               string             `json:"-"`
-	Version                 int64              `json:"version"`
-	Phase                   LocalWorkflowPhase `json:"phase" enum:"waiting_executor,testing,reviewing,fixing,ready,blocked,stopping,stopped"`
-	Cycle                   int                `json:"cycle"`
-	MaxRounds               int                `json:"maxRounds"`
-	Task                    string             `json:"-"`
-	LatestUserPrompt        string             `json:"-"`
-	TestCommands            []string           `json:"testCommands"`
-	Env                     map[string]string  `json:"-"`
-	WorkspacePath           string             `json:"-"`
-	WorkerGeneration        string             `json:"-"`
-	StopRequested           bool               `json:"stopRequested"`
-	BlockCode               string             `json:"blockCode,omitempty"`
-	BlockMessage            string             `json:"blockMessage,omitempty"`
-	CreatedAt               time.Time          `json:"createdAt"`
-	UpdatedAt               time.Time          `json:"updatedAt"`
-	ClosedAt                *time.Time         `json:"closedAt,omitempty"`
+	ProviderRetry           *LocalWorkflowProviderRetry `json:"providerRetry,omitempty"`
+	Automatic               bool                        `json:"automatic,omitempty"`
+	PlanState               string                      `json:"planState,omitempty"`
+	VerificationPlan        *LocalVerificationPlan      `json:"verificationPlan,omitempty"`
+	ExecutionOutput         string                      `json:"-"`
+	VerificationAfterTurnID string                      `json:"-"`
+	ReviewerConfig          AgentConfig                 `json:"-"`
+	ID                      string                      `json:"id"`
+	SessionID               SessionID                   `json:"sessionId"`
+	RequestID               string                      `json:"-"`
+	Version                 int64                       `json:"version"`
+	Phase                   LocalWorkflowPhase          `json:"phase" enum:"waiting_executor,testing,reviewing,fixing,ready,blocked,stopping,stopped"`
+	Cycle                   int                         `json:"cycle"`
+	MaxRounds               int                         `json:"maxRounds"`
+	Task                    string                      `json:"-"`
+	LatestUserPrompt        string                      `json:"-"`
+	TestCommands            []string                    `json:"testCommands"`
+	Env                     map[string]string           `json:"-"`
+	WorkspacePath           string                      `json:"-"`
+	WorkerGeneration        string                      `json:"-"`
+	StopRequested           bool                        `json:"stopRequested"`
+	BlockCode               string                      `json:"blockCode,omitempty"`
+	BlockMessage            string                      `json:"blockMessage,omitempty"`
+	CreatedAt               time.Time                   `json:"createdAt"`
+	UpdatedAt               time.Time                   `json:"updatedAt"`
+	ClosedAt                *time.Time                  `json:"closedAt,omitempty"`
 }
 
 // LocalWorkflowPhase identifies the durable execution checkpoint of a local workflow.

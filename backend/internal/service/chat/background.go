@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-9).
+
 package chat
 
 import (
@@ -34,15 +36,38 @@ func (s *Service) RunBackgroundTask(ctx context.Context, harness domain.AgentHar
 	cfg.DisableNetwork = true
 	conversation, err := driver.Start(ctx, cfg)
 	if err != nil {
-		return "", fmt.Errorf("start background %s task: %w", harness, err)
+		// A failed Start supplies no ownership handle or proof that a provider
+		// process was never created. It cannot authorize an automatic retry.
+		return "", backgroundProviderFailure(fmt.Errorf("start background %s task: %w", harness, err), false)
 	}
 	defer func() {
-		if cleanupErr := cleanupUnpublishedConversation(conversation, true); err == nil && cleanupErr != nil {
-			err = fmt.Errorf("stop background %s task: %w", harness, cleanupErr)
+		cleanupErr := cleanupUnpublishedConversation(conversation, true)
+		if cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("%w: stop background %s task: %w", domain.ErrProviderExecutionUncertain, harness, cleanupErr))
 		}
+		// Close can only detach a controller. Explicit successful termination
+		// is the evidence needed before another provider attempt is safe.
+		_, canTerminate := conversation.(ports.ChatProviderTerminator)
+		err = backgroundProviderFailure(err, canTerminate && cleanupErr == nil && ctx.Err() == nil)
 	}()
 
 	return runBackgroundTurn(ctx, harness, conversation, prompt)
+}
+
+func backgroundProviderFailure(err error, settled bool) error {
+	if err == nil {
+		return nil
+	}
+	var failure *domain.ProviderAccessError
+	var reason domain.ProviderAccessReason
+	if errors.As(err, &failure) && failure != nil && failure.Reason.Valid() {
+		reason = failure.Reason
+	} else if errors.Is(err, ports.ErrChatAuthRequired) {
+		reason = domain.ProviderAccessAuthentication
+	} else {
+		return err
+	}
+	return &domain.ProviderAccessError{Reason: reason, SafeToRetry: settled && !errors.Is(err, domain.ErrProviderExecutionUncertain), Cause: err}
 }
 
 func runBackgroundTurn(ctx context.Context, harness domain.AgentHarness, conversation ports.ChatConversation, prompt string) (string, error) {
@@ -89,6 +114,9 @@ func runBackgroundTurn(ctx context.Context, harness domain.AgentHarness, convers
 				}
 				return "", errors.New("background task provider reported an error")
 			case ports.ChatEventTurnCompleted:
+				if event.Err != nil {
+					return "", event.Err
+				}
 				if event.TurnState != domain.TurnStateCompleted {
 					return "", fmt.Errorf("background task ended with %s", event.TurnState)
 				}

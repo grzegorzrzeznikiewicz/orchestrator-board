@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 // Package localworkflow coordinates durable, explicitly started local work.
 package localworkflow
 
@@ -43,6 +45,8 @@ type Reviews interface {
 
 // Snapshot is a read model of the current workflow and its accumulated evidence.
 type Snapshot struct {
+	PreviousRuns     []domain.LocalWorkflowRun        `json:"previousRuns,omitempty"`
+	Automation       AutomationState                  `json:"automation,omitempty"`
 	Decisions        []domain.LocalWorkflowDecision   `json:"decisions"`
 	Accepted         bool                             `json:"accepted"`
 	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance,accepted"`
@@ -56,6 +60,7 @@ type Snapshot struct {
 
 // Deps supplies durable storage, worker, test and review boundaries.
 type Deps struct {
+	Planner   VerificationPlanner
 	Decisions DecisionConfirmer
 	Store     Store
 	Worker    Worker
@@ -68,14 +73,15 @@ type Deps struct {
 
 // Coordinator owns local workflow transitions and live content observations.
 type Coordinator struct {
-	deps   Deps
-	ctx    context.Context
-	cancel context.CancelFunc
-	locks  sync.Map
-	mu     sync.Mutex
-	guards map[string]*localsnapshot.Guard
-	active map[string]context.CancelFunc
-	wg     sync.WaitGroup
+	deps          Deps
+	ctx           context.Context
+	cancel        context.CancelFunc
+	locks         sync.Map
+	mu            sync.Mutex
+	guards        map[string]*localsnapshot.Guard
+	summaryProofs map[domain.SessionID]cardProof
+	active        map[string]context.CancelFunc
+	wg            sync.WaitGroup
 }
 
 // New constructs a coordinator without starting work or recovery.
@@ -108,6 +114,11 @@ func (c *Coordinator) closeGuard(id string) {
 	c.mu.Lock()
 	g := c.guards[id]
 	delete(c.guards, id)
+	for sessionID, proof := range c.summaryProofs {
+		if proof.runID == id {
+			delete(c.summaryProofs, sessionID)
+		}
+	}
 	c.mu.Unlock()
 	if g != nil {
 		g.Close()
@@ -140,6 +151,9 @@ func (c *Coordinator) launch(id string, fn func(context.Context)) {
 	}()
 }
 func (c *Coordinator) block(ctx context.Context, r domain.LocalWorkflowRun, code string, cause error) error {
+	if r.ProviderRetry != nil && (r.ProviderRetry.State == "waiting" || r.ProviderRetry.State == "checking") {
+		stopProviderRetry(&r, "exhausted")
+	}
 	r.Phase = domain.WorkflowBlocked
 	r.BlockCode = code
 	r.BlockMessage = cause.Error()
@@ -151,6 +165,14 @@ func (c *Coordinator) block(ctx context.Context, r domain.LocalWorkflowRun, code
 
 // Start creates an explicitly requested run, preserving previous completed history.
 func (c *Coordinator) Start(ctx context.Context, id domain.SessionID, requestID string) (Snapshot, error) {
+	return c.start(ctx, id, requestID, false, "")
+}
+
+func (c *Coordinator) startAutomatic(ctx context.Context, id domain.SessionID, requestID, prompt string) (Snapshot, error) {
+	return c.start(ctx, id, requestID, true, prompt)
+}
+
+func (c *Coordinator) start(ctx context.Context, id domain.SessionID, requestID string, automatic bool, prompt string) (Snapshot, error) {
 	if !safeOperationID(requestID) {
 		return Snapshot{}, fmt.Errorf("%w: requestId must be a non-empty opaque identifier", domain.ErrLocalWorkflowInvalid)
 	}
@@ -201,6 +223,13 @@ func (c *Coordinator) Start(ctx context.Context, id domain.SessionID, requestID 
 		observation.Generation = domain.LocalWorkflowWorkerGeneration(session)
 	}
 	r := domain.LocalWorkflowRun{ID: uuid.NewString(), SessionID: id, Phase: domain.WorkflowWaiting, Cycle: 1, MaxRounds: cfg.EffectiveLocalWorkflowMaxRounds(), Task: session.Metadata.Prompt, LatestUserPrompt: session.Metadata.LatestUserPrompt, TestCommands: append([]string{}, cfg.TestCommands...), Env: cfg.Env, WorkspacePath: session.Metadata.WorkspacePath, WorkerGeneration: observation.Generation, CreatedAt: c.now(), UpdatedAt: c.now()}
+	if automatic {
+		r.Automatic = true
+		r.PlanState = "pending"
+		if prompt != "" {
+			r.LatestUserPrompt = prompt
+		}
+	}
 	if len(cfg.Reviewers) == 1 {
 		r.ReviewerConfig = cfg.Reviewers[0].AgentConfig
 	}
@@ -212,7 +241,7 @@ func (c *Coordinator) Start(ctx context.Context, id domain.SessionID, requestID 
 		invalid = "Local workflow requires a Codex executor"
 	case len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode:
 		invalid = "Local workflow requires one Claude Code reviewer"
-	case len(cfg.TestCommands) == 0:
+	case len(cfg.TestCommands) == 0 && !automatic:
 		invalid = "Configure at least one test command before starting the workflow"
 	case session.IsTerminated:
 		invalid = "Executor is terminated"
@@ -252,7 +281,11 @@ func (c *Coordinator) Get(ctx context.Context, id domain.SessionID) (Snapshot, e
 		return Snapshot{}, e
 	}
 	if !ok {
-		return Snapshot{Decisions: []domain.LocalWorkflowDecision{}, Stage: "executing", Reviews: []domain.ReviewRun{}, Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
+		automation, err := c.automation(ctx, id)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		return Snapshot{Automation: automation, Decisions: []domain.LocalWorkflowDecision{}, Stage: "executing", Reviews: []domain.ReviewRun{}, Operations: []domain.LocalWorkflowOperation{}, Tests: []domain.LocalWorkflowTestResult{}, RequiredFindings: []domain.LocalReviewFinding{}}, nil
 	}
 	return c.snapshot(ctx, r)
 }
@@ -296,7 +329,33 @@ func (c *Coordinator) snapshot(ctx context.Context, r domain.LocalWorkflowRun) (
 	snap.Current = currentEvidence(snap) && c.checkGuard(ctx, r.ID) == nil
 	snap.Accepted = acceptedEvidence(snap)
 	snap.Stage = workflowStage(snap)
+	snap.Automation, e = c.automation(ctx, r.SessionID)
+	if e != nil {
+		return snap, e
+	}
+	if history, ok := c.deps.Store.(interface {
+		ListSessionLocalWorkflows(context.Context, domain.SessionID) ([]domain.LocalWorkflowRun, error)
+	}); ok {
+		runs, err := history.ListSessionLocalWorkflows(ctx, r.SessionID)
+		if err != nil {
+			return snap, err
+		}
+		for _, old := range runs {
+			if old.ID != r.ID {
+				snap.PreviousRuns = append(snap.PreviousRuns, old)
+			}
+		}
+	}
+	if snap.Automation.Pending {
+		if r.StopRequested {
+			snap.Automation.BlockMessage = r.BlockMessage
+		}
+		snap.Current = false
+		snap.Accepted = false
+		snap.Stage = "executing"
+	}
 
+	c.rememberSummary(snap)
 	return snap, nil
 }
 func latestOperation(ops []domain.LocalWorkflowOperation, kind string, cycle int) *domain.LocalWorkflowOperation {
@@ -338,8 +397,23 @@ func (c *Coordinator) Evaluate(ctx context.Context, id string) error {
 	if e != nil {
 		return e
 	}
+	if r.Phase == domain.WorkflowWaiting && r.PlanState == "running" && !c.isActive(r.ID+":plan") {
+		stopProviderRetry(&r, "uncertain")
+		return c.block(ctx, r, "provider_execution_uncertain", fmt.Errorf("planner ended without a durable completion; end the affected session before starting another task"))
+	}
+	if r.StopRequested && r.Phase != domain.WorkflowStopping {
+		return nil
+	}
 	switch r.Phase {
-	case domain.WorkflowBlocked, domain.WorkflowStopped:
+	case domain.WorkflowBlocked:
+		if r.BlockCode == "provider_waiting" && r.ProviderRetry != nil {
+			return c.recoverProvider(ctx, r, ops)
+		}
+		if r.Automatic {
+			return c.recoverAutomatic(ctx, r, ops)
+		}
+		return nil
+	case domain.WorkflowStopped:
 		return nil
 	case domain.WorkflowStopping:
 		return c.finishStop(ctx, r, ops)
@@ -356,11 +430,17 @@ func (c *Coordinator) Evaluate(ctx context.Context, id string) error {
 		if obs.Generation != r.WorkerGeneration {
 			return c.block(ctx, r, "worker_changed", fmt.Errorf("executor controller changed; explicitly resume"))
 		}
+		if r.Automatic && obs.State == "queued" {
+			return c.drain(ctx, r.SessionID)
+		}
 		if obs.State == "running" || obs.State == "queued" {
 			return nil
 		}
 		if !workerVerificationAllowed(r, obs) {
 			return c.block(ctx, r, "executor_"+obs.State, fmt.Errorf("executor is %s: %s", obs.State, obs.Error))
+		}
+		if r.Automatic && r.VerificationPlan == nil {
+			return c.beginPlanning(ctx, r)
 		}
 		return c.beginTests(ctx, r, ops)
 	case domain.WorkflowTesting:
@@ -459,7 +539,11 @@ func (c *Coordinator) beginTests(ctx context.Context, r domain.LocalWorkflowRun,
 	c.guards[r.ID] = guard
 	c.mu.Unlock()
 	c.launch(op.ID, func(background context.Context) {
-		results, runErr := c.deps.Tests.Run(background, TestPlan{OperationID: op.ID, WorkspacePath: r.WorkspacePath, Commands: r.TestCommands, Env: r.Env, DataDir: c.deps.DataDir})
+		var results []domain.LocalWorkflowTestResult
+		var runErr error
+		if len(r.TestCommands) > 0 {
+			results, runErr = c.deps.Tests.Run(background, TestPlan{OperationID: op.ID, WorkspacePath: r.WorkspacePath, Commands: r.TestCommands, Env: r.Env, DataDir: c.deps.DataDir})
+		}
 		if runErr == nil {
 			runErr = validateTestEvidence(r, op, results)
 		}
@@ -491,8 +575,19 @@ func (c *Coordinator) beginTests(ctx context.Context, r domain.LocalWorkflowRun,
 			latest.Phase = domain.WorkflowBlocked
 			latest.BlockCode = "tests_failed"
 			latest.BlockMessage = runErr.Error()
+			if r.Automatic && op.State != "uncertain" && background.Err() == nil {
+				if latest.Cycle < latest.MaxRounds {
+					latest.Phase = domain.WorkflowFixing
+				} else {
+					latest.BlockCode = "round_limit"
+					latest.BlockMessage = "Test failures remain at the round limit. Increase the limit to continue."
+				}
+			}
 			op.ErrorMessage = runErr.Error()
 			c.closeGuard(r.ID)
+		} else {
+			latest.BlockCode = ""
+			latest.BlockMessage = ""
 		}
 		latest.UpdatedAt = c.now()
 		if _, e = c.deps.Store.CompleteLocalWorkflowOperation(context.WithoutCancel(background), latest.Version, op, latest, results); e != nil {
@@ -506,11 +601,15 @@ func (c *Coordinator) beginReview(ctx context.Context, r domain.LocalWorkflowRun
 	if test == nil || test.State != "succeeded" {
 		return c.block(ctx, r, "tests_missing", fmt.Errorf("successful tests for this cycle are missing"))
 	}
+	contextID, e := c.providerContextID(ctx, r)
+	if e != nil {
+		return c.block(ctx, r, "configuration", e)
+	}
 	op := c.newOperation(r, ops, "review")
 	op.SnapshotID = test.SnapshotID
 	op.ObservationID = test.ObservationID
 	op.InputOperationID = test.ID
-	_, ok, e := c.reserve(ctx, r, domain.WorkflowReviewing, op)
+	r, ok, e := c.reserve(ctx, r, domain.WorkflowReviewing, op)
 	if e != nil || !ok {
 		return e
 	}
@@ -522,12 +621,25 @@ func (c *Coordinator) beginReview(ctx context.Context, r domain.LocalWorkflowRun
 		if e != nil || !ok {
 			return
 		}
-		if latest.StopRequested || latest.Phase != domain.WorkflowReviewing {
+		if errors.Is(launchErr, domain.ErrProviderExecutionUncertain) && latest.ClosedAt == nil {
+			op.ReviewRunID, op.State, op.CompletedAt = result.ID, "uncertain", nil
+			stopProviderRetry(&latest, "uncertain")
+			latest.Phase, latest.BlockCode, latest.BlockMessage = domain.WorkflowBlocked, "provider_execution_uncertain", "Reviewer launch has no confirmed termination; end the affected session before starting another task."
+			latest.UpdatedAt = c.now()
+			if _, e = c.deps.Store.CompleteLocalWorkflowOperation(context.WithoutCancel(background), latest.Version, op, latest, nil); e != nil {
+				c.deps.Logger.Error("record uncertain reviewer launch", "error", e)
+			}
+			c.closeGuard(r.ID)
+			return
+		}
+		if latest.StopRequested || latest.Phase != domain.WorkflowReviewing || latest.ClosedAt != nil || latest.Version != r.Version {
 			if result.ID != "" {
 				_ = c.deps.Reviews.CancelWorkflowLocal(context.WithoutCancel(background), result.ID)
 			}
-			op.ReviewRunID = result.ID
-			c.settleInterrupted(background, latest, op, nil)
+			if latest.StopRequested && latest.ClosedAt == nil {
+				op.ReviewRunID = result.ID
+				c.settleInterrupted(background, latest, op, nil)
+			}
 			return
 		}
 		op.ReviewRunID = result.ID
@@ -537,6 +649,9 @@ func (c *Coordinator) beginReview(ctx context.Context, r domain.LocalWorkflowRun
 			latest.Phase = domain.WorkflowBlocked
 			latest.BlockCode = "review_error"
 			latest.BlockMessage = launchErr.Error()
+			if next, safe := c.scheduleProviderRetry(latest, "review", op.ID, contextID, launchErr); safe {
+				latest = next
+			}
 			at := c.now()
 			op.CompletedAt = &at
 			c.closeGuard(r.ID)
@@ -585,7 +700,11 @@ func (c *Coordinator) consumeReview(ctx context.Context, r domain.LocalWorkflowR
 	default:
 		return c.block(ctx, r, "review_error", fmt.Errorf("review has no actionable verdict"))
 	}
-	_, e := c.deps.Store.CompleteLocalWorkflowOperation(ctx, r.Version, op, r, nil)
+	changed, e := c.deps.Store.CompleteLocalWorkflowOperation(ctx, r.Version, op, r, nil)
+	if e == nil && changed && r.Phase == domain.WorkflowReady {
+		r.Version++
+		c.rememberReadySummary(ctx, r, result)
+	}
 	return e
 }
 func (c *Coordinator) beginFix(ctx context.Context, r domain.LocalWorkflowRun, ops []domain.LocalWorkflowOperation) error {
@@ -652,7 +771,13 @@ func (c *Coordinator) consumeFix(ctx context.Context, r domain.LocalWorkflowRun,
 		at := c.now()
 		op.CompletedAt = &at
 		r.Cycle++
+		if r.Automatic {
+			r.VerificationPlan = nil
+			r.PlanState = "pending"
+		}
 		r.Phase = domain.WorkflowWaiting
+		r.BlockCode = ""
+		r.BlockMessage = ""
 	default:
 		return c.block(ctx, r, "executor_"+obs.State, fmt.Errorf("correction is %s: %s", obs.State, obs.Error))
 	}

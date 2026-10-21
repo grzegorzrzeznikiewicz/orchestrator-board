@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { createContext, useContext } from "react";
 import type { components } from "../../api/schema";
 import type { useDaemonStatus } from "../hooks/useDaemonStatus";
@@ -10,6 +12,7 @@ export type ShellContextValue = {
 	workspaceStartupState: "loading" | "ready" | "error";
 	createProject: (input: {
 		path: string;
+		reviewMode?: "local" | "pr";
 		workerAgent: string;
 		orchestratorAgent: string;
 		trackerIntake?: components["schemas"]["TrackerIntakeConfig"];
@@ -18,6 +21,7 @@ export type ShellContextValue = {
 	cloneProject: (input: {
 		remoteUrl: string;
 		destinationParent: string;
+		reviewMode?: "local" | "pr";
 		workerAgent: string;
 		orchestratorAgent: string;
 		trackerIntake?: components["schemas"]["TrackerIntakeConfig"];

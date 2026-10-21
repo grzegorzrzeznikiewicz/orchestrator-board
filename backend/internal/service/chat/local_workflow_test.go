@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package chat_test
 
 import (
@@ -8,12 +10,63 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/localworkflow"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	chatsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/chat"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 )
+
+func TestHumanInputQueuesUntilWorkflowVerificationReleasesWorkspace(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	project, ok, err := h.st.GetProject(ctx, string(testProject))
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	session, _, err := h.st.GetSession(ctx, testSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.Kind = domain.KindWorker
+	if err = h.st.UpdateSession(ctx, session); err != nil {
+		t.Fatal(err)
+	}
+	project.Config.ReviewMode = domain.ReviewTargetLocal
+	if err = h.st.UpsertProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := h.st.CreateLocalWorkflow(ctx, domain.LocalWorkflowRun{ID: uuid.NewString(), SessionID: testSession, Phase: domain.WorkflowTesting, Cycle: 1, MaxRounds: 3, CreatedAt: time.Now(), UpdatedAt: time.Now()}, "verification-fence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := h.svc.Send(ctx, testSession, ports.ChatUserMessage{Text: "Implement the next correction", Origin: domain.MessageOriginHuman, ClientMessageID: "human-during-tests"})
+	if err != nil || turn.State != domain.TurnStateQueued {
+		t.Fatalf("human input must be preserved in queue: %+v %v", turn, err)
+	}
+	if err = h.svc.DrainQueued(ctx, testSession); err != nil {
+		t.Fatal(err)
+	}
+	durable, err := h.st.TurnByID(ctx, turn.ID)
+	if err != nil || durable.State != domain.TurnStateQueued {
+		t.Fatalf("verification fence bypassed: %+v %v", durable, err)
+	}
+	run.Phase = domain.WorkflowStopped
+	now := time.Now()
+	run.ClosedAt = &now
+	if _, err = h.st.AdvanceLocalWorkflow(ctx, run.Version, run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err = h.svc.DrainQueued(ctx, testSession); err != nil {
+		t.Fatal(err)
+	}
+	durable, err = h.st.TurnByID(ctx, turn.ID)
+	if err != nil || durable.State == domain.TurnStateQueued {
+		t.Fatalf("human work did not resume: %+v %v", durable, err)
+	}
+}
 
 type workflowQueueBoundary struct {
 	*sqlite.Store

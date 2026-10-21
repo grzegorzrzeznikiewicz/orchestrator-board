@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package controllers
 
 import (
@@ -9,6 +11,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/devimport"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/legacyimport"
+	"github.com/aoagents/agent-orchestrator/backend/internal/localworkflow"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	agentsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/agent"
 	"github.com/aoagents/agent-orchestrator/backend/internal/service/agentauth"
@@ -3479,6 +3482,8 @@ type SideLabelRequest struct {
 // LocalWorkflowResponse exposes workflow facts without execution environment or absolute paths.
 // absolute log/workspace paths are excluded by the domain JSON boundary.
 type LocalWorkflowResponse struct {
+	PreviousRuns     []domain.LocalWorkflowRun        `json:"previousRuns,omitempty"`
+	Automation       localworkflow.AutomationState    `json:"automation,omitempty"`
 	Stage            string                           `json:"stage" enum:"executing,testing,local_review,fixing,awaiting_acceptance,accepted"`
 	Decisions        []domain.LocalWorkflowDecision   `json:"decisions"`
 	Accepted         bool                             `json:"accepted"`
@@ -3531,4 +3536,14 @@ type LocalWorkflowTestLogParams struct {
 	SessionID string `path:"sessionId"`
 	TestID    string `path:"testId"`
 	Stream    string `query:"stream" enum:"stdout,stderr"`
+}
+
+// LocalWorkflowSummariesResponse contains bounded display cards, without full evidence.
+type LocalWorkflowSummariesResponse struct {
+	Summaries []localworkflow.CardSummary `json:"summaries"`
+}
+
+// LocalWorkflowSummariesQuery scopes a batch card read to visible sessions.
+type LocalWorkflowSummariesQuery struct {
+	SessionIDs string `query:"sessionIds" required:"true" doc:"Comma-separated session IDs (1 to 200)"`
 }

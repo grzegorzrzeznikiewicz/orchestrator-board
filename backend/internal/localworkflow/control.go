@@ -1,8 +1,11 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
@@ -34,6 +37,14 @@ func (c *Coordinator) Stop(ctx context.Context, id domain.SessionID, version int
 		return Snapshot{}, e
 	}
 	r.StopRequested = true
+	c.mu.Lock()
+	for _, key := range []string{r.ID + ":plan", r.ID + ":provider-recovery"} {
+		if cancel := c.active[key]; cancel != nil {
+			cancel()
+		}
+	}
+	c.mu.Unlock()
+	stopProviderRetry(&r, "exhausted")
 	r.Phase = domain.WorkflowStopping
 	r.UpdatedAt = c.now()
 	ok, e := c.deps.Store.AdvanceLocalWorkflow(ctx, r.Version, r, nil)
@@ -86,6 +97,13 @@ func (c *Coordinator) settleInterrupted(ctx context.Context, r domain.LocalWorkf
 // quiesce returns only after every previously reserved effect has a known end.
 // A launch claim without a result is deliberately not evidence of absence.
 func (c *Coordinator) quiesce(ctx context.Context, r domain.LocalWorkflowRun, ops []domain.LocalWorkflowOperation) (domain.LocalWorkflowRun, bool, error) {
+	if r.BlockCode == "provider_execution_uncertain" || r.BlockCode == "provider_uncertain" || r.BlockCode == "review_uncertain" || c.isActive(r.ID+":plan") || c.isActive(r.ID+":provider-recovery") {
+		return r, false, nil
+	}
+	if r.PlanState == "running" {
+		err := c.block(ctx, r, "provider_execution_uncertain", fmt.Errorf("planner has no durable completion; end the affected session before starting another task"))
+		return r, false, err
+	}
 	for _, op := range ops {
 		if !activeOperation(op) {
 			continue
@@ -110,10 +128,11 @@ func (c *Coordinator) quiesce(ctx context.Context, r domain.LocalWorkflowRun, op
 			}
 			c.settleInterrupted(ctx, r, op, state.Results)
 		case "review":
+			if op.State == "uncertain" || op.ReviewRunID == "" {
+				err := c.block(ctx, r, "review_uncertain", fmt.Errorf("review launch has no durable completion; end the affected session before starting another task"))
+				return r, false, err
+			} // Failed status/interrupt is not exact process teardown.
 			runID := op.ReviewRunID
-			if runID == "" {
-				runID = op.ID
-			}
 			result, e := c.deps.Reviews.GetWorkflowLocal(ctx, runID)
 			if e != nil {
 				return r, false, e
@@ -240,7 +259,7 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 	} else if obs.State != "idle" && obs.State != "completed" {
 		return Snapshot{}, fmt.Errorf("%w: executor is %s", domain.ErrLocalWorkflowConflict, obs.State)
 	}
-	if r.BlockCode == "configuration" {
+	if r.BlockCode == "configuration" || r.Automatic && (r.BlockCode == "verification_plan" || strings.HasPrefix(r.BlockCode, "provider_")) {
 		session, ok, e := c.deps.Store.GetSession(ctx, id)
 		if e != nil || !ok {
 			return Snapshot{}, e
@@ -250,13 +269,18 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 			return Snapshot{}, e
 		}
 		cfg := project.Config.WithDefaults()
-		if cfg.EffectiveReviewMode() != domain.ReviewTargetLocal || session.Harness != domain.HarnessCodex || len(cfg.TestCommands) == 0 || len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode || cfg.Validate() != nil {
+		if cfg.EffectiveReviewMode() != domain.ReviewTargetLocal || session.Harness != domain.HarnessCodex || len(cfg.TestCommands) == 0 && !r.Automatic || len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode || cfg.Validate() != nil {
 			return Snapshot{}, fmt.Errorf("%w: fix Local review, Codex, Claude and test configuration first", domain.ErrLocalWorkflowInvalid)
 		}
 		r.TestCommands = append([]string{}, cfg.TestCommands...)
 		r.Env = cfg.Env
+		r.ReviewerConfig = cfg.Reviewers[0].AgentConfig
 		r.Task = session.Metadata.Prompt
 		r.LatestUserPrompt = session.Metadata.LatestUserPrompt
+	}
+	if r.Automatic {
+		r.VerificationPlan = nil
+		r.PlanState = "pending"
 	}
 	next := domain.WorkflowWaiting
 	if r.BlockCode == "round_limit" {
@@ -278,6 +302,7 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 			next = domain.WorkflowFixing
 		}
 	}
+	r.ProviderRetry = nil // An explicit human Resume starts a new bounded recovery budget.
 	r.Phase = next
 	r.StopRequested = false
 	r.BlockCode = ""
@@ -326,6 +351,9 @@ func (c *Coordinator) Run(ctx context.Context) {
 			cancel()
 			return
 		case <-tick.C:
+			if err := c.ProcessAutomaticIntents(ctx); err != nil {
+				c.deps.Logger.Warn("process automatic workflows", "error", err)
+			}
 			runs, e := c.deps.Store.ListOpenLocalWorkflows(ctx)
 			if e != nil {
 				c.deps.Logger.Error("list local workflows", "error", e)

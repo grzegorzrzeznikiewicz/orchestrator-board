@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -82,6 +84,152 @@ beforeEach(() => {
   desktop.available = true;
 });
 describe("LocalWorkflowPanel", () => {
+  it.each(["provider_execution_uncertain", "provider_uncertain", "review_uncertain"])("keeps %s visible and prevents Resume without retry metadata", async (blockCode) => {
+    get.mockResolvedValue({data:{...snapshot,run:{...run,blockCode,blockMessage:"Previous provider termination is unconfirmed"}}});
+    show();
+    expect(await screen.findByText("Previous provider termination is unconfirmed")).toBeVisible();
+    const resume=screen.getByRole("button",{name:"Resume workflow"});
+    expect(resume).toBeDisabled();
+    fireEvent.click(resume);
+    expect(post).not.toHaveBeenCalled();
+  });
+  it("keeps stopped provider uncertainty actionable without promising a safe Resume", async () => {
+    get.mockResolvedValue({data:{...snapshot,run:{...run,stopRequested:true,blockCode:"provider_execution_uncertain",blockMessage:"Previous provider termination is unconfirmed",providerRetry:{stage:"planner",state:"uncertain",reason:"authentication",attempt:1,maxAttempts:3,failureAt:"2026-10-20T10:00:00Z"}}}});
+    show();
+    expect(await screen.findByText("End the affected session and confirm that its provider process has ended before starting another task.")).toBeVisible();
+    expect(screen.queryByText("Check provider access and resume manually when ready.")).toBeNull();
+    const resume=screen.getByRole("button",{name:"Resume workflow"});
+    expect(resume).toBeDisabled();
+    fireEvent.click(resume);
+    expect(post).not.toHaveBeenCalled();
+    expect(decide).not.toHaveBeenCalled();
+  });
+  it("shows durable provider waiting facts while keeping Stop explicit and acceptance unavailable", async () => {
+    get.mockResolvedValue({data:{...snapshot,run:{...run,blockCode:"provider_waiting",blockMessage:"Raw provider text",providerRetry:{stage:"review",state:"waiting",reason:"authentication",attempt:1,maxAttempts:3,failureAt:"2026-10-20T10:00:00Z",nextAt:"2026-10-20T10:02:00Z"}}}});
+    show();
+    expect(await screen.findByText("Waiting for provider access")).toBeVisible();
+    expect(screen.getByText("Provider authentication needs recovery")).toBeVisible();
+    expect(screen.getByText(/^Next attempt:/)).toHaveAttribute("datetime","2026-10-20T10:02:00Z");
+    expect(screen.queryByText("Raw provider text")).toBeNull();
+    expect(screen.queryByRole("button",{name:"Accept changes"})).toBeNull();
+    expect(post).not.toHaveBeenCalled();
+    expect(decide).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Stop workflow"}));
+    await waitFor(()=>expect(post).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/local-workflow/stop",expect.objectContaining({body:{expectedVersion:4}})));
+  });
+  it("retains provider recovery facts in previous workflow history without scheduling them again", async () => {
+    get.mockResolvedValue({data:{...snapshot,previousRuns:[{...run,id:"prior-retry",providerRetry:{stage:"planner",state:"waiting",reason:"unavailable",attempt:2,maxAttempts:3,failureAt:"2026-10-20T10:00:00Z",lastAt:"2026-10-20T10:01:00Z",nextAt:"2026-10-20T10:02:00Z"}}]}});
+    show();
+    fireEvent.click(await screen.findByText("Previous runs (1)"));
+    const history=screen.getByRole("region",{name:"Provider recovery history"});
+    expect(within(history).getByText("Automatic retries: 2 of 3")).toBeVisible();
+    expect(within(history).getByText("Previous issue: Provider is temporarily unavailable")).toBeVisible();
+    expect(within(history).queryByText(/^Next attempt:/)).toBeNull();
+    expect(post).not.toHaveBeenCalled();
+  });
+  it("shows automatic preparation without requiring a manual start", async () => {
+    get.mockResolvedValue({
+      data: { ...snapshot, run: null, automation: { pending: true }, requiredFindings: [] },
+    });
+    show();
+    expect(await screen.findByText("Preparing automatic verification…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Start workflow" })).toBeNull();
+    expect(post).not.toHaveBeenCalled();
+  });
+  it("explains an automatic start waiting for an uncertain previous operation", async () => {
+    get.mockResolvedValue({
+      data: { ...readyForDecision(), automation: { pending: true, blockMessage: "The previous test process has no confirmed completion" }, current: false, accepted: false },
+    });
+    show();
+    expect(await screen.findByRole("alert")).toHaveTextContent("The previous test process has no confirmed completion");
+    expect(screen.getByText("Preparing automatic verification…")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Round history" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Accept changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workflow" })).toBeNull();
+  });
+  it("keeps previous workflow summaries available without claiming current acceptance", async () => {
+    get.mockResolvedValue({
+      data: { ...snapshot, previousRuns: [{ ...run, id: "old-run", phase: "stopped", cycle: 2, closedAt: run.updatedAt, blockCode: "", blockMessage: "", verificationPlan: { profile: "report", rationale: "Report", commands: [], checks: ["Scope"] } }, { ...run, id: "blocked-run", blockMessage: "Previous verification lacked evidence" }] },
+    });
+    show();
+    const summary = await screen.findByText("Previous runs (2)");
+    const history = summary.closest("details")!;
+    expect(history).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    expect(history).toHaveAttribute("open");
+    expect(within(history).getByText("old-run")).toBeVisible();
+    expect(within(history).getByText("blocked-run")).toBeVisible();
+    expect(within(history).getByText("Report")).toBeVisible();
+    expect(within(history).getByText("Cycle 2 of 3")).toBeVisible();
+    expect(within(history).getByText("Workflow stopped")).toBeVisible();
+    expect(within(history).getByText("Previous verification lacked evidence")).toBeVisible();
+    expect(within(history).getAllByRole("time")[0]).toHaveAttribute("dateTime", run.createdAt);
+    expect(within(history).queryByText("Accepted by you")).toBeNull();
+    expect(within(history).queryByRole("button", { name: "Show stdout" })).toBeNull();
+  });
+  it.each(["pending", "running"])("shows automatic verification planning while the plan is %s", async (planState) => {
+    get.mockResolvedValue({
+      data: { ...snapshot, run: { ...run, phase: "waiting_executor", automatic: true, planState, blockCode: "", blockMessage: "" }, requiredFindings: [] },
+    });
+    show();
+    expect(await screen.findByRole("status")).toHaveTextContent("Planning verification");
+    expect(screen.queryByText("Waiting for executor")).toBeNull();
+  });
+  it("keeps a planning failure actionable instead of showing planning indefinitely", async () => {
+    get.mockResolvedValue({
+      data: { ...snapshot, run: { ...run, automatic: true, planState: "pending", blockCode: "configuration", blockMessage: "Configure a Claude reviewer" }, requiredFindings: [] },
+    });
+    show();
+    expect(await screen.findByRole("status")).toHaveTextContent("Workflow blocked");
+    expect(screen.getByText("Configure a Claude reviewer")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Resume workflow" })).toBeEnabled();
+  });
+  it("shows implementation commands and criteria from the verification plan", async () => {
+    get.mockResolvedValue({
+      data: { ...snapshot, run: { ...run, verificationPlan: { profile: "implementation", rationale: "The task changes the parser", commands: ["npm run test:parser", "npm run lint"], checks: ["Reject malformed input"] } } },
+    });
+    show();
+    const plan = await screen.findByRole("region", { name: "Verification plan" });
+    expect(within(plan).getByText("Code changes")).toBeVisible();
+    expect(within(plan).getByText("The task changes the parser")).toBeVisible();
+    expect(within(plan).getByText("npm run test:parser")).toBeVisible();
+    expect(within(plan).getByText("npm run lint")).toBeVisible();
+    expect(within(plan).getByText("Reject malformed input")).toBeVisible();
+    expect(within(plan).queryByText(/Not applicable/)).toBeNull();
+  });
+  it("shows report verification without claiming that automated tests passed", async () => {
+    const ready = readyForDecision();
+    get.mockResolvedValue({
+      data: { ...ready, run: { ...ready.run, automatic: true, testCommands: [], verificationPlan: { profile: "report", rationale: "The task produces an assessment only", commands: [], checks: ["Conclusions cite observed evidence"] } } },
+    });
+    show();
+    const plan = await screen.findByRole("region", { name: "Verification plan" });
+    expect(within(plan).getByText("Report")).toBeVisible();
+    expect(within(plan).getByText("Conclusions cite observed evidence")).toBeVisible();
+    expect(within(plan).getByText("Automated tests: not applicable to this report.")).toBeVisible();
+    expect(screen.getByText("The reviewer approved this report. Ready for your acceptance.")).toBeVisible();
+    expect(screen.queryByText(/Tests passed/)).toBeNull();
+    expect(screen.queryByText(/0 of 0 passed/)).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Round 1" })).getByText("Automated tests: not applicable to this report.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Accept changes" })).toBeEnabled();
+  });
+  it("requires completed reviewer evidence even when automated report tests are not applicable", async () => {
+    const ready = readyForDecision();
+    get.mockResolvedValue({ data: { ...ready, run: { ...ready.run, testCommands: [], verificationPlan: { profile: "report", rationale: "Assessment", commands: [], checks: ["Evidence is cited"] } }, operations: ready.operations.filter((op) => op.kind !== "review") } });
+    show();
+    expect(await screen.findByRole("button", { name: "Accept changes" })).toBeDisabled();
+  });
+  it("does not accept an older ready result while a new instruction is awaiting automatic verification", async () => {
+    get.mockResolvedValue({
+      data: { ...readyForDecision(), automation: { pending: true }, current: false, accepted: false, decisions: [{ id: "previous", kind: "accepted", cycle: 1, snapshotId: "previous-files", createdAt: run.createdAt }] },
+    });
+    show();
+    expect(await screen.findByText("Preparing automatic verification…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Accept changes" })).toBeNull();
+    expect(screen.queryByText("Tests passed and the reviewer approved these files. Ready for your acceptance.")).toBeNull();
+    expect(screen.getByText("Historical acceptance")).toBeVisible();
+    expect(screen.queryByText("Accepted by you")).toBeNull();
+  });
   it("shows required findings and requires an explicit greater limit to resume", async () => {
     show();
     expect(await screen.findByText("Required findings remain")).toBeVisible();

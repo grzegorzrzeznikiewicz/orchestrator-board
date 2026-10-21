@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localsnapshot
 
 import (
@@ -6,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,8 +41,32 @@ func Watch(root string, m Manifest) (*Guard, error) {
 	dirs := map[string]bool{m.Root: true}
 	tracked := map[string]bool{}
 	trackedDirs := map[string]bool{}
+	fileObservations := map[string]os.FileInfo{}
 	for _, entry := range m.Files {
-		tracked[filepath.Join(m.Root, filepath.FromSlash(entry.Path))] = true
+		path := filepath.Join(m.Root, filepath.FromSlash(entry.Path))
+		tracked[path] = true
+		if !entry.Missing {
+			st, statErr := os.Lstat(path)
+			if statErr != nil {
+				_ = w.Close()
+				return nil, statErr
+			}
+			// kqueue can report a read's access-time update as pure CHMOD.
+			// Only regular files with durable ctime evidence can distinguish
+			// that from a real chmod followed quickly by permission restoration.
+			v := reflect.Indirect(reflect.ValueOf(st.Sys()))
+			if st.Mode().IsRegular() && v.IsValid() && v.Kind() == reflect.Struct && canFilterReadChmod(path) {
+				inode := v.FieldByName("Ino")
+				if inode.IsValid() && !inode.IsZero() {
+					for _, key := range []string{"Ctim", "Ctimespec"} {
+						if field := v.FieldByName(key); field.IsValid() && field.CanInterface() && !field.IsZero() {
+							fileObservations[path] = st
+							break
+						}
+					}
+				}
+			}
+		}
 		for p := filepath.Dir(filepath.Join(m.Root, filepath.FromSlash(entry.Path))); p != m.Root && strings.HasPrefix(p, m.Root+string(filepath.Separator)); p = filepath.Dir(p) {
 			trackedDirs[p] = true
 		}
@@ -133,6 +160,12 @@ func Watch(root string, m Manifest) (*Guard, error) {
 			}
 			return rel == "HEAD" || rel == "index" || rel == "packed-refs" || rel == "config" || rel == "shallow" || rel == filepath.Join("info", "exclude") || strings.HasPrefix(rel, "refs"+string(filepath.Separator))
 		}
+		if event.Op == fsnotify.Chmod {
+			if before, ok := fileObservations[path]; ok {
+				after, statErr := os.Lstat(path)
+				return statErr != nil || !os.SameFile(before, after) || statObservation(before) != statObservation(after)
+			}
+		}
 		return tracked[path] || !ignored(path)
 	}
 	go func() {
@@ -178,9 +211,10 @@ func (g *Guard) Changes() <-chan struct{} { return g.change }
 // Done closes after the native observation loop has stopped.
 func (g *Guard) Done() <-chan struct{} { return g.done }
 
-// Check supplements notifications with content and durable observation checks.
-func (g *Guard) Check(ctx context.Context) error {
-	if g.Changed() {
+// CheckObserved checks only observation continuity and directory metadata. It is
+// for display projections, never for test/review admission or user acceptance.
+func (g *Guard) CheckObserved() error {
+	if g.Changed() || g.closed.Load() {
 		return ErrChanged
 	}
 	// kqueue may coalesce a create/delete before it can enumerate the new
@@ -193,6 +227,14 @@ func (g *Guard) Check(ctx context.Context) error {
 			return ErrChanged
 		}
 	}
+	return nil
+}
+
+// Check supplements notifications with fresh content and durable observations.
+func (g *Guard) Check(ctx context.Context) error {
+	if err := g.CheckObserved(); err != nil {
+		return err
+	}
 	m, err := Capture(ctx, g.manifest.Root)
 	if err != nil {
 		return err
@@ -202,6 +244,23 @@ func (g *Guard) Check(ctx context.Context) error {
 		return ErrChanged
 	}
 	return nil
+}
+
+// CheckSnapshot binds a fresh source verification to the guard's original
+// immutable identity, avoiding a second identical capture at the review gate.
+func (g *Guard) CheckSnapshot(ctx context.Context, root, snapshotID, observationID string) error {
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absolute, err = filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return err
+	}
+	if absolute != g.manifest.Root || snapshotID != g.manifest.ID || observationID != g.manifest.ObservationID {
+		return ErrChanged
+	}
+	return g.Check(ctx)
 }
 
 // Close releases all native watches and waits for the consumer to exit.

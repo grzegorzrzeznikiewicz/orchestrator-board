@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 package localworkflow
 
 import (
@@ -43,7 +45,7 @@ type WorkerDelivery interface {
 // ChatInterrupter requests cancellation through the existing Chat service.
 type ChatInterrupter interface {
 	Interrupt(context.Context, domain.SessionID) error
-	CancelQueuedTurn(context.Context, domain.SessionID, string) error
+	CancelWorkflowTurn(context.Context, domain.SessionID, string) error
 }
 
 // SessionWorker adapts durable Chat turns and session-manager delivery to workflow execution.
@@ -200,27 +202,23 @@ func (w *SessionWorker) Interrupt(ctx context.Context, id domain.SessionID, oper
 		if w.chat == nil {
 			return fmt.Errorf("chat interruption unavailable")
 		}
-		if obs.State == "queued" {
-			err := w.chat.CancelQueuedTurn(ctx, id, obs.TurnID)
-			if err == nil {
-				return nil
-			}
-			// Drain can win before cancellation acquires the controller lock. Inspect
-			// its durable outcome and interrupt the same controller if now running.
-			current, readErr := w.Observe(ctx, id, operationID)
-			if readErr != nil {
-				return readErr
-			}
-			switch current.State {
-			case "completed", "interrupted", "failed", "absent":
-				return nil
-			case "running", "needs_input":
-				return w.chat.Interrupt(ctx, id)
-			default:
-				return err
-			}
+		if operationID == "" {
+			return w.chat.Interrupt(ctx, id)
 		}
-		return w.chat.Interrupt(ctx, id)
+		if obs.TurnID == "" {
+			return fmt.Errorf("workflow cancellation requires an identified turn")
+		}
+		return w.chat.CancelWorkflowTurn(ctx, id, obs.TurnID)
 	}
 	return w.delivery.InterruptTUI(ctx, id)
+}
+
+// Drain resumes human input held while verification owned the workspace.
+func (w *SessionWorker) Drain(ctx context.Context, id domain.SessionID) error {
+	if drain, ok := w.chat.(interface {
+		DrainQueued(context.Context, domain.SessionID) error
+	}); ok {
+		return drain.DrainQueued(ctx, id)
+	}
+	return nil
 }

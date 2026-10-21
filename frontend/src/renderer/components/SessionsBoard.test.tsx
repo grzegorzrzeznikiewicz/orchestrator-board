@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-1).
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -179,21 +181,9 @@ it("keeps local workflow and PR sessions on their own board and opens local evid
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
-	client.setQueryData(["local-workflow", "local"], {
-		run: {
-			id: "wf",
-			phase: "testing",
-			cycle: 1,
-			maxRounds: 3,
-			testCommands: ["npm test"],
-		},
-		stage: "testing",
-		current: false,
-		operations: [],
-		tests: [],
-		requiredFindings: [],
-		reviews: [],
-	});
+	client.setQueryData(["local-workflow-summaries", "local", ["local"]], [{
+ sessionId:"local",run:{id:"wf",phase:"testing",cycle:1,maxRounds:3},stage:"testing",current:false,accepted:false,automation:{pending:false},testsPresent:false,testsPassed:0,testsTotal:1,requiredCount:0,
+ }]);
 	renderBoardWithClient(client);
 	const tests = await screen.findByRole("region", { name: "Tests sessions" });
 	expect(within(tests).getByText("Local task")).toBeVisible();

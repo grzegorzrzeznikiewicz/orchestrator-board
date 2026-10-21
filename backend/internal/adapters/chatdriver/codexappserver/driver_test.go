@@ -1,3 +1,5 @@
+// Modified for Orchestrator Board by Gama Software, 2026 (OB-9).
+
 package codexappserver
 
 import (
@@ -1192,6 +1194,7 @@ func TestReadOnlyTurnCannotOverrideSandbox(t *testing.T) {
 
 func TestBackgroundReadOnlySandboxPersistsAcrossTurnOverrides(t *testing.T) {
 	d, srv := newTestDriver(t)
+	srv.reply("config/read", `{"config":{}}`)
 	conv, err := d.Start(context.Background(), ports.ChatStartConfig{
 		WorkspacePath: "/tmp/ws", Permissions: ports.PermissionModeAuto,
 		ReadOnly: true, DisableNetwork: true, Ephemeral: true,
