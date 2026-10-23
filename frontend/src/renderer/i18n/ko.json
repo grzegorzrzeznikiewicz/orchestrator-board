@@ -3113,6 +3113,8 @@
 	"localWorkflow.automationPending": "자동 검증 준비 중…",
 	"localWorkflow.planning": "검증 계획 중",
 	"localWorkflow.verificationPlan": "검증 계획",
+	"localWorkflow.verificationScope": "이번 실행의 검증 범위",
+	"localWorkflow.verificationScopeDescription": "이 검사는 선택한 디렉터리를 대상으로 합니다. 다른 작업은 프로젝트에 설정된 검사를 유지합니다.",
 	"localWorkflow.profile.implementation": "코드 변경",
 	"localWorkflow.profile.report": "보고서",
 	"localWorkflow.planCommands": "명령어",

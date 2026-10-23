@@ -47,8 +47,12 @@ func (c *Coordinator) providerContextID(ctx context.Context, r domain.LocalWorkf
 	if !maps.Equal(r.Env, cfg.Env) || r.ReviewerConfig != cfg.Reviewers[0].AgentConfig {
 		return "", fmt.Errorf("workflow provider configuration is stale")
 	}
+	requiredCommands, err := effectiveConfiguredCommands(r, cfg)
+	if err != nil {
+		return "", err
+	}
 	if r.VerificationPlan != nil && r.VerificationPlan.Profile != "report" {
-		for _, required := range cfg.TestCommands {
+		for _, required := range requiredCommands {
 			if !slices.Contains(r.TestCommands, required) {
 				return "", fmt.Errorf("configured verification checks changed; a fresh plan is required")
 			}
@@ -58,7 +62,8 @@ func (c *Coordinator) providerContextID(ctx context.Context, r domain.LocalWorkf
 		Config                               domain.ProjectConfig
 		Harness                              domain.AgentHarness
 		Model, Effort, Controller, Workspace string
-	}{cfg, s.Harness, s.Metadata.Model, s.Metadata.Effort, s.Metadata.ControllerGeneration, r.WorkspacePath})
+		VerificationContract                 *domain.LocalWorkflowVerificationContract
+	}{cfg, s.Harness, s.Metadata.Model, s.Metadata.Effort, s.Metadata.ControllerGeneration, r.WorkspacePath, r.VerificationContract})
 	if err != nil {
 		return "", err
 	}
@@ -256,7 +261,10 @@ func (c *Coordinator) refreshProviderConfiguration(ctx context.Context, r domain
 	if cfg.EffectiveReviewMode() != domain.ReviewTargetLocal || s.Harness != domain.HarnessCodex || len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode || cfg.Validate() != nil {
 		return r, fmt.Errorf("fix Local review, Codex and Claude provider configuration first")
 	}
-	r.TestCommands = append([]string{}, cfg.TestCommands...)
+	r.TestCommands, err = effectiveConfiguredCommands(r, cfg)
+	if err != nil {
+		return r, err
+	}
 	r.Env = cfg.Env
 	r.ReviewerConfig = cfg.Reviewers[0].AgentConfig
 	return r, nil

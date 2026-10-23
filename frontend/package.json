@@ -1,7 +1,7 @@
 {
 	"name": "orchestrator-board",
 	"productName": "Orchestrator Board",
-	"version": "0.13.0",
+	"version": "0.13.1",
 	"private": true,
 	"description": "Gama Software desktop board for supervising coding agents, based on Agent Orchestrator",
 	"author": "Gama Software; upstream Agent Orchestrator contributors",

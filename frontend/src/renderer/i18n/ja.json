@@ -3113,6 +3113,8 @@
 	"localWorkflow.automationPending": "自動検証を準備しています…",
 	"localWorkflow.planning": "検証を計画中",
 	"localWorkflow.verificationPlan": "検証計画",
+	"localWorkflow.verificationScope": "この実行の検証範囲",
+	"localWorkflow.verificationScopeDescription": "これらのチェックは選択されたディレクトリが対象です。他のタスクではプロジェクトに設定されたチェックを維持します。",
 	"localWorkflow.profile.implementation": "コード変更",
 	"localWorkflow.profile.report": "レポート",
 	"localWorkflow.planCommands": "コマンド",

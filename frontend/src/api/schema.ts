@@ -5339,6 +5339,7 @@ export interface components {
             testCommands: string[];
             /** Format: date-time */
             updatedAt: string;
+            verificationContract?: components["schemas"]["LocalWorkflowVerificationContract"];
             verificationPlan?: components["schemas"]["LocalVerificationPlan"];
             /** Format: int64 */
             version: number;
@@ -5364,6 +5365,19 @@ export interface components {
             status: "succeeded" | "failed" | "interrupted" | "timed_out";
             stderrTruncated: boolean;
             stdoutTruncated: boolean;
+        };
+        LocalWorkflowVerificationContract: {
+            basis: string;
+            commands: string[];
+            requestId: string;
+            scopePath: string;
+            version: number;
+        };
+        LocalWorkflowVerificationScopeRequest: {
+            basis: string;
+            requestId: string;
+            scopePath: string;
+            workflowId: string;
         };
         MarkAllNotificationsReadRequest: {
             /** @description Acknowledge exactly these notifications. Omit to acknowledge every unread notification; paginating clients should send the ids they actually rendered so later pages stay unread. */
@@ -5785,6 +5799,7 @@ export interface components {
             /** Format: int64 */
             expectedVersion: number;
             maxRounds?: null | number;
+            verificationScope?: components["schemas"]["LocalWorkflowVerificationScopeRequest"];
         };
         RetryTurnResponse: {
             providerTurnId?: string;

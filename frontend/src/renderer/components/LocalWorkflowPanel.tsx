@@ -4,6 +4,7 @@ import { aoBridge } from "../lib/bridge";
 import { useQuery } from "@tanstack/react-query";
 import { LocalWorkflowHistory } from "./LocalWorkflowHistory";
 import { LocalWorkflowProviderRetry } from "./LocalWorkflowProviderRetry";
+import { LocalWorkflowVerificationContract } from "./LocalWorkflowVerificationContract";
 import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -154,6 +155,7 @@ export function LocalWorkflowPanel({
               limit: run.maxRounds,
             })}
           </p>
+          <LocalWorkflowVerificationContract contract={run.verificationContract} />
           {plan && (
             <section
               aria-label={t("localWorkflow.verificationPlan")}

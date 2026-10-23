@@ -136,6 +136,80 @@ type summaryHTTPService struct {
 	ids *[]domain.SessionID
 }
 
+func TestLocalWorkflowScopedResumeRequiresCapableService(t *testing.T) {
+	const scope = `{"workflowId":"wf","requestId":"scope-request","scopePath":"workflow-demo","basis":"Keep the original demo scope"}`
+	for _, tc := range []struct {
+		name, body string
+		want       int
+	}{
+		{"ordinary resume", `{"expectedVersion":4}`, 200},
+		{"null scope", `{"expectedVersion":4,"verificationScope":null}`, 200},
+		{"unsupported scope never falls back", `{"expectedVersion":4,"verificationScope":` + scope + `}`, 501},
+		{"invalid version", `{"expectedVersion":0,"verificationScope":` + scope + `}`, 422},
+		{"caller cannot supply executable commands", `{"expectedVersion":4,"verificationScope":{"workflowId":"wf","requestId":"r","scopePath":"workflow-demo","basis":"demo","commands":["true"]}}`, 400},
+		{"trailing input", `{"expectedVersion":4,"verificationScope":` + scope + `} {}`, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := httpd.NewRouterWithControl(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, httpd.APIDeps{LocalWorkflow: workflowHTTPService{}}, httpd.ControlDeps{})
+			res := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/worker/local-workflow/resume", strings.NewReader(tc.body))
+			req.Header.Set("X-Request-ID", "scoped-resume")
+			router.ServeHTTP(res, req)
+			if res.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", res.Code, tc.want, res.Body.String())
+			}
+		})
+	}
+}
+
+type scopedResumeHTTPService struct {
+	workflowHTTPService
+	calls *int
+}
+
+func (s scopedResumeHTTPService) Resume(context.Context, domain.SessionID, int64, *int) (localworkflow.Snapshot, error) {
+	panic("scoped request must never use ordinary Resume")
+}
+
+func (s scopedResumeHTTPService) ResumeWithVerificationScope(ctx context.Context, id domain.SessionID, version int64, limit *int, scope *localworkflow.VerificationScopeRequest) (localworkflow.Snapshot, error) {
+	*s.calls++
+	if id != "worker" || version != 4 || limit == nil || *limit != 5 || scope.WorkflowID != "wf" || scope.RequestID != "scope-request" || scope.ScopePath != "workflow-demo" || scope.Basis != "Keep the original demo scope" {
+		return localworkflow.Snapshot{}, domain.ErrLocalWorkflowInvalid
+	}
+	return s.Get(ctx, id)
+}
+
+func TestLocalWorkflowScopedResumeHTTPDispatch(t *testing.T) {
+	const body = `{"expectedVersion":4,"maxRounds":5,"verificationScope":{"workflowId":"wf","requestId":"scope-request","scopePath":"workflow-demo","basis":"Keep the original demo scope"}}`
+	for _, tc := range []struct {
+		name, body, code string
+		err              error
+		want, calls      int
+	}{
+		{"scoped method", body, "", nil, 200, 1},
+		{"stale contract", body, "LOCAL_WORKFLOW_CONFLICT", domain.ErrLocalWorkflowConflict, 409, 1},
+		{"invalid contract", body, "LOCAL_WORKFLOW_INVALID", domain.ErrLocalWorkflowInvalid, 422, 1},
+		{"invalid version before dispatch", strings.Replace(body, `"expectedVersion":4`, `"expectedVersion":0`, 1), "LOCAL_WORKFLOW_INVALID", nil, 422, 0},
+		{"unknown nested field before dispatch", strings.Replace(body, `"scopePath":"workflow-demo"`, `"scopePath":"workflow-demo","actor":"user"`, 1), "INVALID_JSON", nil, 400, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls int
+			svc := scopedResumeHTTPService{workflowHTTPService{err: tc.err}, &calls}
+			router := httpd.NewRouterWithControl(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, httpd.APIDeps{LocalWorkflow: svc}, httpd.ControlDeps{})
+			res := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/worker/local-workflow/resume", strings.NewReader(tc.body))
+			req.Header.Set("X-Request-ID", "scope-dispatch")
+			router.ServeHTTP(res, req)
+			if res.Code != tc.want || calls != tc.calls {
+				t.Fatalf("status=%d calls=%d body=%s", res.Code, calls, res.Body.String())
+			}
+			if tc.code != "" && (!strings.Contains(res.Body.String(), tc.code) || !strings.Contains(res.Body.String(), "scope-dispatch")) {
+				t.Fatalf("lost error envelope: %s", res.Body.String())
+			}
+		})
+	}
+}
+
 func (s summaryHTTPService) Summaries(_ context.Context, ids []domain.SessionID) ([]localworkflow.CardSummary, error) {
 	*s.ids = append([]domain.SessionID{}, ids...)
 	return []localworkflow.CardSummary{{SessionID: "one", Stage: "testing", TestsPassed: 1, TestsTotal: 2}}, nil
