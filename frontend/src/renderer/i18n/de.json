@@ -3113,6 +3113,8 @@
 	"localWorkflow.automationPending": "Automatische Prüfung wird vorbereitet…",
 	"localWorkflow.planning": "Prüfung wird geplant",
 	"localWorkflow.verificationPlan": "Prüfplan",
+	"localWorkflow.verificationScope": "Prüfumfang dieses Durchlaufs",
+	"localWorkflow.verificationScopeDescription": "Diese Prüfungen gelten für das ausgewählte Verzeichnis. Andere Aufgaben behalten die konfigurierten Prüfungen des Projekts bei.",
 	"localWorkflow.profile.implementation": "Codeänderungen",
 	"localWorkflow.profile.report": "Bericht",
 	"localWorkflow.planCommands": "Befehle",

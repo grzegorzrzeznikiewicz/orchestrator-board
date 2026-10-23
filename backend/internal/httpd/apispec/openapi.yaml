@@ -15715,6 +15715,8 @@ components:
         updatedAt:
           format: date-time
           type: string
+        verificationContract:
+          $ref: '#/components/schemas/LocalWorkflowVerificationContract'
         verificationPlan:
           $ref: '#/components/schemas/LocalVerificationPlan'
         version:
@@ -15793,6 +15795,43 @@ components:
       - stdoutTruncated
       - stderrTruncated
       - startedAt
+      type: object
+    LocalWorkflowVerificationContract:
+      properties:
+        basis:
+          type: string
+        commands:
+          items:
+            type: string
+          type: array
+        requestId:
+          type: string
+        scopePath:
+          type: string
+        version:
+          type: integer
+      required:
+      - version
+      - scopePath
+      - commands
+      - basis
+      - requestId
+      type: object
+    LocalWorkflowVerificationScopeRequest:
+      properties:
+        basis:
+          type: string
+        requestId:
+          type: string
+        scopePath:
+          type: string
+        workflowId:
+          type: string
+      required:
+      - workflowId
+      - requestId
+      - scopePath
+      - basis
       type: object
     MarkAllNotificationsReadRequest:
       properties:
@@ -16824,6 +16863,8 @@ components:
           type:
           - "null"
           - integer
+        verificationScope:
+          $ref: '#/components/schemas/LocalWorkflowVerificationScopeRequest'
       required:
       - expectedVersion
       type: object

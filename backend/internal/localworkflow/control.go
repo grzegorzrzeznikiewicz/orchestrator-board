@@ -201,6 +201,12 @@ func (c *Coordinator) finishStop(ctx context.Context, r domain.LocalWorkflowRun,
 
 // Resume deliberately retries verification only after prior effects have settled.
 func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version int64, maxRounds *int) (Snapshot, error) {
+	return c.ResumeWithVerificationScope(ctx, id, version, maxRounds, nil)
+}
+
+// ResumeWithVerificationScope optionally records an explicit package contract
+// atomically with Resume. It never clears uncertain execution or invents checks.
+func (c *Coordinator) ResumeWithVerificationScope(ctx context.Context, id domain.SessionID, version int64, maxRounds *int, scope *VerificationScopeRequest) (Snapshot, error) {
 	snap, e := c.Get(ctx, id)
 	if e != nil {
 		return Snapshot{}, e
@@ -242,6 +248,16 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 	if !quiet {
 		return Snapshot{}, fmt.Errorf("%w: a previous operation is still active or uncertain; stop it before resuming", domain.ErrLocalWorkflowConflict)
 	}
+	if scope != nil {
+		if !r.Automatic {
+			return Snapshot{}, fmt.Errorf("%w: explicit verification scope requires an automatic workflow", domain.ErrLocalWorkflowInvalid)
+		}
+		contract, err := requestedVerificationContract(r, scope)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		r.VerificationContract = contract
+	}
 	r.MaxRounds = limit
 	obs, e := c.deps.Worker.Observe(ctx, id, "")
 	if e != nil {
@@ -259,7 +275,7 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 	} else if obs.State != "idle" && obs.State != "completed" {
 		return Snapshot{}, fmt.Errorf("%w: executor is %s", domain.ErrLocalWorkflowConflict, obs.State)
 	}
-	if r.BlockCode == "configuration" || r.Automatic && (r.BlockCode == "verification_plan" || strings.HasPrefix(r.BlockCode, "provider_")) {
+	if r.VerificationContract != nil || r.BlockCode == "configuration" || r.Automatic && (r.BlockCode == "verification_plan" || strings.HasPrefix(r.BlockCode, "provider_")) {
 		session, ok, e := c.deps.Store.GetSession(ctx, id)
 		if e != nil || !ok {
 			return Snapshot{}, e
@@ -272,7 +288,10 @@ func (c *Coordinator) Resume(ctx context.Context, id domain.SessionID, version i
 		if cfg.EffectiveReviewMode() != domain.ReviewTargetLocal || session.Harness != domain.HarnessCodex || len(cfg.TestCommands) == 0 && !r.Automatic || len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode || cfg.Validate() != nil {
 			return Snapshot{}, fmt.Errorf("%w: fix Local review, Codex, Claude and test configuration first", domain.ErrLocalWorkflowInvalid)
 		}
-		r.TestCommands = append([]string{}, cfg.TestCommands...)
+		r.TestCommands, e = effectiveConfiguredCommands(r, cfg)
+		if e != nil {
+			return Snapshot{}, e
+		}
 		r.Env = cfg.Env
 		r.ReviewerConfig = cfg.Reviewers[0].AgentConfig
 		r.Task = session.Metadata.Prompt

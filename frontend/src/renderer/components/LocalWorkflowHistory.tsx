@@ -3,6 +3,7 @@
 import { useTranslation } from "react-i18next";
 import type { LocalWorkflowSnapshot } from "../lib/local-workflow-api";
 import { LocalWorkflowProviderRetry } from "./LocalWorkflowProviderRetry";
+import { LocalWorkflowVerificationContract } from "./LocalWorkflowVerificationContract";
 
 type TestResult = NonNullable<LocalWorkflowSnapshot["tests"]>[number];
 export function WorkflowTestResult({
@@ -72,6 +73,7 @@ export function LocalWorkflowHistory({
 								<p>{t(`localWorkflow.profile.${previous.verificationPlan.profile}`)}</p>
 							)}
 							<LocalWorkflowProviderRetry retry={previous.providerRetry} historical />
+							<LocalWorkflowVerificationContract contract={previous.verificationContract} />
 							{previous.blockMessage && !(previous.blockCode === "provider_waiting" && previous.providerRetry) && (
 								<p className="whitespace-pre-wrap break-words text-warning">{previous.blockMessage}</p>
 							)}

@@ -147,6 +147,19 @@ func (c *LocalWorkflowController) resume(w http.ResponseWriter, r *http.Request)
 		localWorkflowResponse(w, r, localworkflow.Snapshot{}, domain.ErrLocalWorkflowInvalid)
 		return
 	}
+	if in.VerificationScope != nil {
+		svc, ok := c.Svc.(interface {
+			ResumeWithVerificationScope(context.Context, domain.SessionID, int64, *int, *localworkflow.VerificationScopeRequest) (localworkflow.Snapshot, error)
+		})
+		if !ok {
+			apispec.NotImplemented(w, r, r.Method, "/api/v1/sessions/{sessionId}/local-workflow/resume")
+			return
+		}
+		scope := in.VerificationScope
+		result, err := svc.ResumeWithVerificationScope(r.Context(), sessionID(r), in.ExpectedVersion, in.MaxRounds, &localworkflow.VerificationScopeRequest{WorkflowID: scope.WorkflowID, RequestID: scope.RequestID, ScopePath: scope.ScopePath, Basis: scope.Basis})
+		localWorkflowResponse(w, r, result, err)
+		return
+	}
 	result, e := c.Svc.Resume(r.Context(), sessionID(r), in.ExpectedVersion, in.MaxRounds)
 	localWorkflowResponse(w, r, result, e)
 }

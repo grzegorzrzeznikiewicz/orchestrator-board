@@ -166,6 +166,8 @@ var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names
 	"DomainProviderAccessReason":                           "ProviderAccessReason",
 	"DomainLocalWorkflowProviderRetry":                     "LocalWorkflowProviderRetry",
 	"DomainLocalWorkflowRun":                               "LocalWorkflowRun",
+	"DomainLocalWorkflowVerificationContract":              "LocalWorkflowVerificationContract",
+	"ControllersLocalWorkflowVerificationScopeRequest":     "LocalWorkflowVerificationScopeRequest",
 	"DomainLocalWorkflowOperation":                         "LocalWorkflowOperation",
 	"DomainLocalWorkflowTestResult":                        "LocalWorkflowTestResult",
 	"ControllersLocalWorkflowResponse":                     "LocalWorkflowResponse",

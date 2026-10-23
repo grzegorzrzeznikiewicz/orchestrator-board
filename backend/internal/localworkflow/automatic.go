@@ -248,6 +248,9 @@ func (c *Coordinator) beginPlanning(ctx context.Context, r domain.LocalWorkflowR
 		if planErr == nil {
 			planErr = plan.Validate()
 		}
+		if planErr == nil {
+			planErr = validateScopedVerificationPlan(r, plan)
+		}
 		unlock := c.lock(r.ID)
 		defer unlock()
 		latest, found, err := c.deps.Store.GetLocalWorkflow(context.WithoutCancel(background), r.ID)
@@ -315,6 +318,7 @@ func (c *Coordinator) recoverAutomatic(ctx context.Context, r domain.LocalWorkfl
 		return nil
 	}
 	var updated *domain.ProjectConfig
+	var commands []string
 	switch r.BlockCode {
 	case "configuration", "verification_plan":
 		session, found, err := c.deps.Store.GetSession(ctx, r.SessionID)
@@ -326,7 +330,11 @@ func (c *Coordinator) recoverAutomatic(ctx context.Context, r domain.LocalWorkfl
 			return err
 		}
 		cfg := project.Config.WithDefaults()
-		if r.BlockCode == "verification_plan" && reflect.DeepEqual(r.TestCommands, cfg.TestCommands) {
+		commands, err = effectiveConfiguredCommands(r, cfg)
+		if err != nil {
+			return c.block(ctx, r, "verification_scope", err)
+		}
+		if r.BlockCode == "verification_plan" && reflect.DeepEqual(r.TestCommands, commands) {
 			return nil
 		}
 		if cfg.EffectiveReviewMode() != domain.ReviewTargetLocal || session.Harness != domain.HarnessCodex || len(cfg.Reviewers) != 1 || cfg.Reviewers[0].Harness != domain.ReviewerClaudeCode {
@@ -346,7 +354,7 @@ func (c *Coordinator) recoverAutomatic(ctx context.Context, r domain.LocalWorkfl
 	}
 	r = next
 	if updated != nil {
-		r.TestCommands = append([]string{}, updated.TestCommands...)
+		r.TestCommands = commands
 		r.Env = updated.Env
 		r.ReviewerConfig = updated.Reviewers[0].AgentConfig
 	}

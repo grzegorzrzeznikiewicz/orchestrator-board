@@ -3521,8 +3521,18 @@ type StopLocalWorkflowRequest struct {
 
 // ResumeLocalWorkflowRequest requests deliberate continuation and an optional greater round limit.
 type ResumeLocalWorkflowRequest struct {
-	ExpectedVersion int64 `json:"expectedVersion"`
-	MaxRounds       *int  `json:"maxRounds,omitempty"`
+	ExpectedVersion   int64                                  `json:"expectedVersion"`
+	MaxRounds         *int                                   `json:"maxRounds,omitempty"`
+	VerificationScope *LocalWorkflowVerificationScopeRequest `json:"verificationScope,omitempty"`
+}
+
+// LocalWorkflowVerificationScopeRequest declares a directory to verify for one
+// exact run. Commands are discovered and validated by the server.
+type LocalWorkflowVerificationScopeRequest struct {
+	WorkflowID string `json:"workflowId"`
+	RequestID  string `json:"requestId"`
+	ScopePath  string `json:"scopePath"`
+	Basis      string `json:"basis"`
 }
 
 // LocalWorkflowTestLogResponse contains a bounded log read and its truncation indicator.

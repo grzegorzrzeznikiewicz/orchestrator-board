@@ -3095,6 +3095,8 @@
 	"localWorkflow.automationPending": "正在准备自动验证…",
 	"localWorkflow.planning": "正在规划验证",
 	"localWorkflow.verificationPlan": "验证计划",
+	"localWorkflow.verificationScope": "本次运行的验证范围",
+	"localWorkflow.verificationScopeDescription": "这些检查涵盖所选目录。其他任务仍使用项目配置的检查。",
 	"localWorkflow.profile.implementation": "代码更改",
 	"localWorkflow.profile.report": "报告",
 	"localWorkflow.planCommands": "命令",

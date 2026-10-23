@@ -3159,6 +3159,8 @@
 	"localWorkflow.automationPending": "Preparando a verificação automática…",
 	"localWorkflow.planning": "Planejando a verificação",
 	"localWorkflow.verificationPlan": "Plano de verificação",
+	"localWorkflow.verificationScope": "Escopo de verificação desta execução",
+	"localWorkflow.verificationScopeDescription": "Estas verificações abrangem o diretório selecionado. As outras tarefas mantêm as verificações configuradas do projeto.",
 	"localWorkflow.profile.implementation": "Alterações de código",
 	"localWorkflow.profile.report": "Relatório",
 	"localWorkflow.planCommands": "Comandos",

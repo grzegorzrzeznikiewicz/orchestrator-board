@@ -84,6 +84,22 @@ beforeEach(() => {
   desktop.available = true;
 });
 describe("LocalWorkflowPanel", () => {
+  it("discloses a run-scoped verification contract without implying project-wide coverage", async () => {
+    get.mockResolvedValue({ data: { ...snapshot, run: { ...run, verificationContract: {
+      version: 1, scopePath: "workflow-demo", commands: ["cd workflow-demo && CI=1 npm run test", "cd workflow-demo && npm run check"],
+      basis: "Keep the original four-file demo scope", requestId: "explicit-demo-scope",
+    } } } });
+    show();
+    const contract = await screen.findByRole("region", { name: "Verification scope for this run" });
+    expect(within(contract).getByText("workflow-demo")).toBeVisible();
+    expect(within(contract).getByText("Keep the original four-file demo scope")).toBeVisible();
+    expect(within(contract).getByText("cd workflow-demo && CI=1 npm run test")).toBeVisible();
+    expect(within(contract).getByText("cd workflow-demo && npm run check")).toBeVisible();
+    expect(within(contract).getByText("These checks cover the selected directory. Other tasks keep the project's configured checks.")).toBeVisible();
+    expect(screen.queryByText("Accepted by you")).toBeNull();
+    expect(post).not.toHaveBeenCalled();
+    expect(decide).not.toHaveBeenCalled();
+  });
   it.each(["provider_execution_uncertain", "provider_uncertain", "review_uncertain"])("keeps %s visible and prevents Resume without retry metadata", async (blockCode) => {
     get.mockResolvedValue({data:{...snapshot,run:{...run,blockCode,blockMessage:"Previous provider termination is unconfirmed"}}});
     show();
